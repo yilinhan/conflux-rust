@@ -2,151 +2,9 @@
 // Conflux is free software and distributed under GNU General Public License.
 // See http://www.gnu.org/licenses/
 
-use cfx_types::U256;
-use std::{
-    cmp::{min, Ordering},
-    convert, ops,
-};
+use cfx_types::SignedBigNum;
 
 const NULL: usize = !0;
-
-#[derive(Copy, Clone, Eq, Debug)]
-pub struct SignedBigNum {
-    sign: bool,
-    num: U256,
-}
-
-impl SignedBigNum {
-    pub fn zero() -> Self {
-        Self {
-            sign: false,
-            num: U256::zero(),
-        }
-    }
-
-    pub fn neg(num: U256) -> Self { Self { sign: true, num } }
-
-    pub fn pos(num: U256) -> Self { Self { sign: false, num } }
-
-    pub fn negate(signed_num: &SignedBigNum) -> SignedBigNum {
-        if signed_num.num == U256::zero() {
-            signed_num.clone()
-        } else {
-            SignedBigNum {
-                sign: !signed_num.sign,
-                num: signed_num.num.clone(),
-            }
-        }
-    }
-}
-
-impl convert::From<U256> for SignedBigNum {
-    fn from(num: U256) -> Self { Self { sign: false, num } }
-}
-
-impl convert::From<SignedBigNum> for U256 {
-    fn from(signed_num: SignedBigNum) -> Self {
-        assert!(!signed_num.sign);
-        signed_num.num
-    }
-}
-
-impl ops::Add<SignedBigNum> for SignedBigNum {
-    type Output = SignedBigNum;
-
-    fn add(self, other: SignedBigNum) -> SignedBigNum {
-        if self.sign == other.sign {
-            SignedBigNum {
-                sign: self.sign,
-                num: self.num + other.num,
-            }
-        } else if self.num == other.num {
-            SignedBigNum::zero()
-        } else if self.num < other.num {
-            SignedBigNum {
-                sign: other.sign,
-                num: other.num - self.num,
-            }
-        } else {
-            SignedBigNum {
-                sign: self.sign,
-                num: self.num - other.num,
-            }
-        }
-    }
-}
-
-impl ops::AddAssign<SignedBigNum> for SignedBigNum {
-    fn add_assign(&mut self, other: SignedBigNum) {
-        if self.sign == other.sign {
-            self.num += other.num;
-        } else if self.num == other.num {
-            self.sign = false;
-            self.num = U256::zero();
-        } else if self.num < other.num {
-            self.sign = other.sign;
-            self.num = other.num - self.num;
-        } else {
-            self.num -= other.num;
-        }
-    }
-}
-
-impl ops::Sub<SignedBigNum> for SignedBigNum {
-    type Output = SignedBigNum;
-
-    fn sub(self, other: SignedBigNum) -> SignedBigNum {
-        self + SignedBigNum::negate(&other)
-    }
-}
-
-impl ops::SubAssign<SignedBigNum> for SignedBigNum {
-    fn sub_assign(&mut self, other: SignedBigNum) {
-        *self += SignedBigNum::negate(&other);
-    }
-}
-
-impl Ord for SignedBigNum {
-    fn cmp(&self, other: &SignedBigNum) -> Ordering {
-        if self.sign != other.sign {
-            return if self.sign {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            };
-        }
-
-        if self.num == other.num {
-            return Ordering::Equal;
-        }
-
-        if self.sign {
-            if self.num < other.num {
-                Ordering::Greater
-            } else {
-                Ordering::Less
-            }
-        } else {
-            if self.num < other.num {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        }
-    }
-}
-
-impl PartialOrd for SignedBigNum {
-    fn partial_cmp(&self, other: &SignedBigNum) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for SignedBigNum {
-    fn eq(&self, other: &SignedBigNum) -> bool {
-        self.sign == other.sign && self.num == other.num
-    }
-}
 
 #[derive(Clone)]
 struct MinNode {
@@ -157,6 +15,7 @@ struct MinNode {
     size: usize,
     value: SignedBigNum,
     min: SignedBigNum,
+    min_idx: usize,
     delta: SignedBigNum,
     catepillar_value: SignedBigNum,
     catepillar_delta: SignedBigNum,
@@ -172,6 +31,8 @@ impl Default for MinNode {
             size: 1,
             value: SignedBigNum::zero(),
             min: SignedBigNum::zero(),
+            // We need to set this value to its own index
+            min_idx: 0,
             delta: SignedBigNum::zero(),
             catepillar_value: SignedBigNum::zero(),
             catepillar_delta: SignedBigNum::zero(),
@@ -190,23 +51,34 @@ impl MinLinkCutTree {
 
     pub fn make_tree(&mut self, v: usize) {
         if self.tree.len() <= v {
+            let old_len = self.tree.len();
             self.tree.resize(v + 1, MinNode::default());
+            for i in old_len..self.tree.len() {
+                self.tree[i].min_idx = i;
+            }
         }
     }
 
     fn update(&mut self, v: usize) {
         self.tree[v].size = 1;
         self.tree[v].min = self.tree[v].value;
+        self.tree[v].min_idx = v;
 
         let u = self.tree[v].left_child;
         if u != NULL {
             self.tree[v].size += self.tree[u].size;
-            self.tree[v].min = min(self.tree[v].min, self.tree[u].min);
+            if self.tree[v].min > self.tree[u].min {
+                self.tree[v].min = self.tree[u].min;
+                self.tree[v].min_idx = self.tree[u].min_idx;
+            }
         }
         let w = self.tree[v].right_child;
         if w != NULL {
             self.tree[v].size += self.tree[w].size;
-            self.tree[v].min = min(self.tree[v].min, self.tree[w].min);
+            if self.tree[v].min > self.tree[w].min {
+                self.tree[v].min = self.tree[w].min;
+                self.tree[v].min_idx = self.tree[w].min_idx;
+            }
         }
         self.tree[v].min = self.tree[v].min + self.tree[v].delta;
     }
@@ -508,6 +380,12 @@ impl MinLinkCutTree {
         self.tree[v].min.clone()
     }
 
+    pub fn path_aggregate_idx(&mut self, v: usize) -> usize {
+        self.access(v);
+
+        self.tree[v].min_idx
+    }
+
     pub fn get(&mut self, v: usize) -> SignedBigNum {
         self.access(v);
 
@@ -517,8 +395,9 @@ impl MinLinkCutTree {
 
 #[cfg(test)]
 mod tests {
-    use super::{MinLinkCutTree, U256};
+    use super::MinLinkCutTree;
     use crate::SignedBigNum;
+    use cfx_types::U256;
 
     #[test]
     fn test_min() {
@@ -665,8 +544,11 @@ mod tests {
         assert_eq!(tree.get(4), SignedBigNum::pos(U256::from(3)));
         assert_eq!(tree.get(5), SignedBigNum::pos(U256::from(1)));
 
+        tree.path_apply(1, &SignedBigNum::pos(U256::from(1)));
         assert_eq!(tree.path_aggregate(2), SignedBigNum::pos(U256::from(3)));
-        tree.path_apply(0, &SignedBigNum::neg(U256::from(1)));
+        assert_eq!(tree.path_aggregate_idx(2), 2);
+        tree.path_apply(0, &SignedBigNum::neg(U256::from(2)));
         assert_eq!(tree.path_aggregate(2), SignedBigNum::pos(U256::from(2)));
+        assert_eq!(tree.path_aggregate_idx(2), 0);
     }
 }
