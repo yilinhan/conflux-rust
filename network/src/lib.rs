@@ -39,6 +39,7 @@ pub type PeerId = usize;
 mod connection;
 mod discovery;
 mod error;
+mod ip_limit;
 mod ip_utils;
 mod node_database;
 pub mod node_table;
@@ -216,6 +217,7 @@ pub trait NetworkProtocolHandler: Sync + Send {
 pub enum UpdateNodeOperation {
     Failure,
     Demotion,
+    Remove,
 }
 
 pub trait NetworkContext {
