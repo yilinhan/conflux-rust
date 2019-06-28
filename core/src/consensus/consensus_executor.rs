@@ -12,6 +12,7 @@ use crate::{
     storage::{state::StateTrait, state_manager::StateManagerTrait},
     vm::{EnvInfo, Spec},
     vm_factory::VmFactory,
+    SharedTransactionPool,
 };
 use cfx_types::{H256, U256, U512};
 use parking_lot::{Mutex, RwLock};
@@ -19,10 +20,11 @@ use primitives::{
     receipt::{
         Receipt, TRANSACTION_OUTCOME_EXCEPTION, TRANSACTION_OUTCOME_SUCCESS,
     },
-    Block, BlockHeaderBuilder, SignedTransaction, TransactionAddress,
+    Block, BlockHeaderBuilder, SignedTransaction, StateRootWithAuxInfo,
+    TransactionAddress,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::{
         mpsc::{channel, RecvError, Sender, TryRecvError},
         Arc,
@@ -30,7 +32,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use hash::{KECCAK_EMPTY_LIST_RLP, KECCAK_NULL_RLP};
+use hash::KECCAK_EMPTY_LIST_RLP;
 use std::fmt::{Debug, Formatter};
 
 // TODO: Parallelize anticone calculation by moving calculation into task.
@@ -101,7 +103,7 @@ impl EpochExecutionTask {
 #[derive(Debug)]
 struct GetExecutionResultTask {
     pub epoch_hash: H256,
-    pub sender: Sender<(H256, H256)>,
+    pub sender: Sender<(StateRootWithAuxInfo, H256)>,
 }
 
 pub struct ConsensusExecutor {
@@ -121,12 +123,16 @@ pub struct ConsensusExecutor {
 
 impl ConsensusExecutor {
     pub fn start(
-        data_man: Arc<BlockDataManager>, vm: VmFactory,
-        consensus_inner: Arc<RwLock<ConsensusGraphInner>>, bench_mode: bool,
+        tx_pool: SharedTransactionPool, data_man: Arc<BlockDataManager>,
+        vm: VmFactory, consensus_inner: Arc<RwLock<ConsensusGraphInner>>,
+        bench_mode: bool,
     ) -> Self
     {
-        let handler =
-            Arc::new(ConsensusExecutionHandler::new(data_man.clone(), vm));
+        let handler = Arc::new(ConsensusExecutionHandler::new(
+            tx_pool,
+            data_man.clone(),
+            vm,
+        ));
         let (sender, receiver) = channel();
 
         let executor = ConsensusExecutor {
@@ -194,9 +200,11 @@ impl ConsensusExecutor {
     /// It is the caller's responsibility to ensure that `epoch_hash` is indeed
     /// computed when all the tasks before are finished.
     // TODO Release Consensus inner lock if possible when the function is called
-    pub fn wait_for_result(&self, epoch_hash: H256) -> (H256, H256) {
+    pub fn wait_for_result(
+        &self, epoch_hash: H256,
+    ) -> (StateRootWithAuxInfo, H256) {
         if self.bench_mode {
-            (KECCAK_NULL_RLP, KECCAK_EMPTY_LIST_RLP)
+            (Default::default(), KECCAK_EMPTY_LIST_RLP)
         } else {
             let (sender, receiver) = channel();
             self.sender
@@ -249,13 +257,22 @@ impl ConsensusExecutor {
 }
 
 pub struct ConsensusExecutionHandler {
+    tx_pool: SharedTransactionPool,
     data_man: Arc<BlockDataManager>,
     pub vm: VmFactory,
 }
 
 impl ConsensusExecutionHandler {
-    pub fn new(data_man: Arc<BlockDataManager>, vm: VmFactory) -> Self {
-        ConsensusExecutionHandler { data_man, vm }
+    pub fn new(
+        tx_pool: SharedTransactionPool, data_man: Arc<BlockDataManager>,
+        vm: VmFactory,
+    ) -> Self
+    {
+        ConsensusExecutionHandler {
+            tx_pool,
+            data_man,
+            vm,
+        }
     }
 
     /// Return `false` if someting goes wrong, and we will break the working
@@ -304,7 +321,9 @@ impl ConsensusExecutionHandler {
         let state_root = self
             .data_man
             .storage_manager
-            .get_state_at(task.epoch_hash)
+            .get_state_no_commit(task.epoch_hash)
+            .unwrap()
+            // Unwrapping is safe because the state is assumed to exist.
             .unwrap()
             .get_state_root()
             .unwrap()
@@ -334,13 +353,16 @@ impl ConsensusExecutionHandler {
     {
         // Check if the state has been computed
         if debug_record.is_none()
-            && self.data_man.storage_manager.state_exists(*epoch_hash)
+            && self.data_man.storage_manager.contains_state(*epoch_hash)
             && self.data_man.epoch_executed_and_recovered(
                 &epoch_hash,
                 &epoch_block_hashes,
                 on_local_pivot,
             )
         {
+            if on_local_pivot {
+                *self.tx_pool.best_executed_epoch.lock() = *epoch_hash;
+            }
             debug!("Skip execution in prefix {:?}", epoch_hash);
             return;
         }
@@ -362,7 +384,11 @@ impl ConsensusExecutionHandler {
             StateDb::new(
                 self.data_man
                     .storage_manager
-                    .get_state_at(*pivot_block.block_header.parent_hash())
+                    .get_state_for_next_epoch(
+                        *pivot_block.block_header.parent_hash(),
+                    )
+                    .unwrap()
+                    // Unwrapping is safe because the state exists.
                     .unwrap(),
             ),
             0.into(),
@@ -371,7 +397,6 @@ impl ConsensusExecutionHandler {
         self.process_epoch_transactions(
             &mut state,
             &epoch_blocks,
-            &self.data_man.txpool.unexecuted_transaction_addresses,
             on_local_pivot,
         );
 
@@ -387,23 +412,17 @@ impl ConsensusExecutionHandler {
         }
 
         // FIXME: We may want to propagate the error up
-        if on_local_pivot {
-            state
-                .commit_and_notify(*epoch_hash, &self.data_man.txpool)
-                .unwrap();
+        let state_root = if on_local_pivot {
+            state.commit_and_notify(*epoch_hash, &self.tx_pool).unwrap();
+            *self.tx_pool.best_executed_epoch.lock() = *epoch_hash;
         } else {
             state.commit(*epoch_hash).unwrap();
-        }
+        };
         debug!(
             "compute_epoch: on_local_pivot={}, epoch={:?} state_root={:?} receipt_root={:?}",
             on_local_pivot,
             epoch_hash,
-            self.data_man
-                .storage_manager
-                .get_state_at(*epoch_hash)
-                .unwrap()
-                .get_state_root()
-                .unwrap(),
+            state_root,
             self
                 .data_man
                 .get_receipts_root(&epoch_hash)
@@ -413,9 +432,6 @@ impl ConsensusExecutionHandler {
 
     fn process_epoch_transactions(
         &self, state: &mut State, epoch_blocks: &Vec<Arc<Block>>,
-        unexecuted_transaction_addresses_lock: &Mutex<
-            HashMap<H256, HashSet<TransactionAddress>>,
-        >,
         on_local_pivot: bool,
     ) -> Vec<Arc<Vec<Receipt>>>
     {
@@ -446,8 +462,6 @@ impl ConsensusExecutionHandler {
             let mut n_other = 0;
             let mut last_cumulative_gas_used = U256::zero();
             {
-                let mut unexecuted_transaction_addresses =
-                    unexecuted_transaction_addresses_lock.lock();
                 for (idx, transaction) in block.transactions.iter().enumerate()
                 {
                     let mut tx_outcome_status = TRANSACTION_OUTCOME_EXCEPTION;
@@ -514,23 +528,6 @@ impl ConsensusExecutionHandler {
                             self.data_man.insert_transaction_address_to_kv(
                                 &hash, &tx_addr,
                             );
-                            unexecuted_transaction_addresses.remove(&hash);
-                        } else {
-                            let mut remove = false;
-                            if let Some(addr_set) =
-                                unexecuted_transaction_addresses.get_mut(&hash)
-                            {
-                                addr_set.remove(&tx_addr);
-                                if addr_set.is_empty() {
-                                    remove = true;
-                                }
-                            }
-                            if remove {
-                                // If a tx is not executed in all blocks, we
-                                // will pack it again
-                                // and it has already been in to_pending now.
-                                unexecuted_transaction_addresses.remove(&hash);
-                            }
                         }
                     }
                 }
@@ -554,17 +551,8 @@ impl ConsensusExecutionHandler {
             BlockHeaderBuilder::compute_block_receipts_root(&epoch_receipts),
         );
         if on_local_pivot {
-            let parent = pivot_block.block_header.parent_hash();
-            if *parent != self.data_man.genesis_block().hash() {
-                let state = self
-                    .data_man
-                    .storage_manager
-                    .get_state_at(*parent)
-                    .unwrap();
-                self.data_man
-                    .txpool
-                    .recycle_future_transactions(to_pending, state);
-            }
+            self.tx_pool
+                .recycle_failed_executed_transactions(to_pending);
         }
         debug!("Finish processing tx for epoch");
         epoch_receipts
@@ -810,18 +798,17 @@ impl ConsensusExecutionHandler {
             StateDb::new(
                 self.data_man
                     .storage_manager
-                    .get_state_at(*pivot_block.block_header.parent_hash())
+                    .get_state_for_next_epoch(
+                        *pivot_block.block_header.parent_hash(),
+                    )
+                    .unwrap()
+                    // Unwrapping is safe because the state exists.
                     .unwrap(),
             ),
             0.into(),
             self.vm.clone(),
         );
-        self.process_epoch_transactions(
-            &mut state,
-            &epoch_blocks,
-            &Mutex::new(Default::default()),
-            false,
-        )
+        self.process_epoch_transactions(&mut state, &epoch_blocks, false)
     }
 
     pub fn call_virtual(
@@ -833,7 +820,9 @@ impl ConsensusExecutionHandler {
             StateDb::new(
                 self.data_man
                     .storage_manager
-                    .get_state_at(*epoch_id)
+                    .get_state_no_commit(*epoch_id)
+                    .unwrap()
+                    // Unwrapping is safe because the state exists.
                     .unwrap(),
             ),
             0.into(),

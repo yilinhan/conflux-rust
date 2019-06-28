@@ -34,5 +34,10 @@ error_chain! {
             description("Send too many transactions to node in catch-up mode"),
             display("Sent too many transactions"),
         }
+
+        InvalidTimestamp {
+            description("Peer timestamp drifts too much"),
+            display("Drift too much"),
+        }
     }
 }

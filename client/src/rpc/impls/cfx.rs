@@ -13,12 +13,17 @@ use crate::rpc::{
 use blockgen::BlockGenerator;
 use cfx_types::{H160, H256};
 use cfxcore::{
-    storage::StorageManager, PeerInfo, SharedConsensusGraph,
-    SharedSynchronizationService, SharedTransactionPool,
+    PeerInfo, SharedConsensusGraph, SharedSynchronizationService,
+    SharedTransactionPool,
 };
 use jsonrpc_core::{Error as RpcError, Result as RpcResult};
 use jsonrpc_macros::Trailing;
-use network::node_table::{NodeEndpoint, NodeEntry, NodeId};
+use network::{
+    get_high_priority_packets,
+    node_table::{Node, NodeEndpoint, NodeEntry, NodeId},
+    throttling::{self, THROTTLING_SERVICE},
+    SessionDetails,
+};
 use parking_lot::{Condvar, Mutex};
 use primitives::{
     block::MAX_BLOCK_SIZE_IN_BYTES, Action,
@@ -31,8 +36,6 @@ use std::{collections::BTreeMap, net::SocketAddr, sync::Arc};
 pub struct RpcImpl {
     pub consensus: SharedConsensusGraph,
     sync: SharedSynchronizationService,
-    #[allow(dead_code)]
-    storage_manager: Arc<StorageManager>,
     block_gen: Arc<BlockGenerator>,
     tx_pool: SharedTransactionPool,
     exit: Arc<(Mutex<bool>, Condvar)>,
@@ -41,14 +44,13 @@ pub struct RpcImpl {
 impl RpcImpl {
     pub fn new(
         consensus: SharedConsensusGraph, sync: SharedSynchronizationService,
-        storage_manager: Arc<StorageManager>, block_gen: Arc<BlockGenerator>,
-        tx_pool: SharedTransactionPool, exit: Arc<(Mutex<bool>, Condvar)>,
+        block_gen: Arc<BlockGenerator>, tx_pool: SharedTransactionPool,
+        exit: Arc<(Mutex<bool>, Condvar)>,
     ) -> Self
     {
         RpcImpl {
             consensus,
             sync,
-            storage_manager,
             block_gen,
             tx_pool,
             exit,
@@ -185,10 +187,6 @@ impl RpcImpl {
         let hash: H256 = hash.into();
         info!("RPC Request: cfx_getTransactionByHash({:?})", hash);
 
-        if let Some(transaction) = self.tx_pool.get_transaction(&hash) {
-            return Ok(Some(RpcTransaction::from_signed(&transaction, None)));
-        }
-
         if let Some((transaction, receipt, tx_address)) =
             self.consensus.get_transaction_info_by_hash(&hash)
         {
@@ -197,6 +195,13 @@ impl RpcImpl {
                 Some(Receipt::new(transaction.clone(), receipt, tx_address)),
             )))
         } else {
+            if let Some(transaction) = self.tx_pool.get_transaction(&hash) {
+                return Ok(Some(RpcTransaction::from_signed(
+                    &transaction,
+                    None,
+                )));
+            }
+
             Ok(None)
         }
     }
@@ -288,12 +293,16 @@ impl RpcImpl {
             })
             .and_then(|tx| {
                 let (signed_trans, failed_trans) = self.tx_pool.insert_new_transactions(
-                    self.consensus.best_state_block_hash(),
                     &vec![tx],
                 );
-                if signed_trans.len() + failed_trans.len() != 1 {
+                if signed_trans.len() + failed_trans.len() > 1 {
+                    // This should never happen
                     error!("insert_new_transactions failed, invalid length of returned result vector {}", signed_trans.len() + failed_trans.len());
                     Ok(H256::new().into())
+                } else if signed_trans.len() + failed_trans.len() == 0 {
+                    // For tx in transactions_pubkey_cache, we simply ignore them
+                    debug!("insert_new_transactions ignores inserted transactions");
+                    Err(RpcError::invalid_params(String::from("tx already exist")))
                 } else {
                     if signed_trans.is_empty() {
                         let mut tx_err = String::from("");
@@ -591,11 +600,11 @@ impl RpcImpl {
     }
 
     fn txpool_status(&self) -> RpcResult<BTreeMap<String, usize>> {
-        let (ready_len, pending_len) = self.tx_pool.stats();
+        let (ready_len, deferred_len) = self.tx_pool.stats();
 
         let mut ret: BTreeMap<String, usize> = BTreeMap::new();
         ret.insert("ready".into(), ready_len);
-        ret.insert("pending".into(), pending_len);
+        ret.insert("deferred".into(), deferred_len);
 
         Ok(ret)
     }
@@ -605,7 +614,7 @@ impl RpcImpl {
     ) -> RpcResult<
         BTreeMap<String, BTreeMap<String, BTreeMap<usize, Vec<String>>>>,
     > {
-        let (ready_txs, pending_txs) = self.tx_pool.content();
+        let (ready_txs, deferred_txs) = self.tx_pool.content();
         let converter = |tx: Arc<SignedTransaction>| -> String {
             let to = match tx.action {
                 Action::Create => "<Create contract>".into(),
@@ -623,7 +632,7 @@ impl RpcImpl {
             BTreeMap<String, BTreeMap<usize, Vec<String>>>,
         > = BTreeMap::new();
         ret.insert("ready".into(), grouped_txs(ready_txs, converter));
-        ret.insert("pending".into(), grouped_txs(pending_txs, converter));
+        ret.insert("deferred".into(), grouped_txs(deferred_txs, converter));
 
         Ok(ret)
     }
@@ -636,7 +645,7 @@ impl RpcImpl {
             BTreeMap<String, BTreeMap<usize, Vec<RpcTransaction>>>,
         >,
     > {
-        let (ready_txs, pending_txs) = self.tx_pool.content();
+        let (ready_txs, deferred_txs) = self.tx_pool.content();
         let converter = |tx: Arc<SignedTransaction>| -> RpcTransaction {
             RpcTransaction::from_signed(&tx, None)
         };
@@ -646,9 +655,48 @@ impl RpcImpl {
             BTreeMap<String, BTreeMap<usize, Vec<RpcTransaction>>>,
         > = BTreeMap::new();
         ret.insert("ready".into(), grouped_txs(ready_txs, converter));
-        ret.insert("pending".into(), grouped_txs(pending_txs, converter));
+        ret.insert("deferred".into(), grouped_txs(deferred_txs, converter));
 
         Ok(ret)
+    }
+
+    fn clear_tx_pool(&self) -> RpcResult<()> {
+        self.tx_pool.clear_tx_pool();
+        Ok(())
+    }
+
+    fn net_throttling(&self) -> RpcResult<throttling::Service> {
+        Ok(THROTTLING_SERVICE.read().clone())
+    }
+
+    fn net_node(&self, id: NodeId) -> RpcResult<Option<(String, Node)>> {
+        match self.sync.get_network_service().get_node(&id) {
+            None => Ok(None),
+            Some((trusted, node)) => {
+                if trusted {
+                    Ok(Some(("trusted".into(), node)))
+                } else {
+                    Ok(Some(("untrusted".into(), node)))
+                }
+            }
+        }
+    }
+
+    fn net_sessions(
+        &self, node_id: Trailing<NodeId>,
+    ) -> RpcResult<Vec<SessionDetails>> {
+        match self
+            .sync
+            .get_network_service()
+            .get_detailed_sessions(node_id.into())
+        {
+            None => Ok(Vec::new()),
+            Some(sessions) => Ok(sessions),
+        }
+    }
+
+    fn net_high_priority_packets(&self) -> RpcResult<usize> {
+        Ok(get_high_priority_packets())
     }
 }
 
@@ -907,5 +955,25 @@ impl DebugRpc for DebugRpcImpl {
         >,
     > {
         self.rpc_impl.txpool_content()
+    }
+
+    fn clear_tx_pool(&self) -> RpcResult<()> { self.rpc_impl.clear_tx_pool() }
+
+    fn net_throttling(&self) -> RpcResult<throttling::Service> {
+        self.rpc_impl.net_throttling()
+    }
+
+    fn net_node(&self, id: NodeId) -> RpcResult<Option<(String, Node)>> {
+        self.rpc_impl.net_node(id)
+    }
+
+    fn net_sessions(
+        &self, node_id: Trailing<NodeId>,
+    ) -> RpcResult<Vec<SessionDetails>> {
+        self.rpc_impl.net_sessions(node_id)
+    }
+
+    fn net_high_priority_packets(&self) -> RpcResult<usize> {
+        self.rpc_impl.net_high_priority_packets()
     }
 }
