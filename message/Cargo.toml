@@ -9,3 +9,4 @@ cfx-types = { path = "../cfx_types" }
 cfx-bytes = { path = "../cfx_bytes" }
 primitives = { path = "../primitives" }
 log = "0.3"
+byteorder = "1.3.2"
