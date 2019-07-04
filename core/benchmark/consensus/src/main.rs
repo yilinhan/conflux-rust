@@ -69,13 +69,16 @@ fn create_simple_block(
     block_weight: u32,
 ) -> (H256, Block)
 {
-    sync.consensus.wait_for_generation(&parent_hash);
+    //    sync.consensus.wait_for_generation(&parent_hash);
     let parent_header = sync.block_header_by_hash(&parent_hash).unwrap();
-    let exp_diff = sync.expected_difficulty(&parent_hash);
-    assert!(
-        exp_diff == U256::from(10),
-        "Difficulty hike in bench is not supported yet!"
-    );
+    //    let exp_diff = sync.expected_difficulty(&parent_hash);
+    //    assert!(
+    //        exp_diff == U256::from(10),
+    //        "Difficulty hike in bench is not supported yet!"
+    //    );
+    // Note that because we do not fill the timestamp, it should keep at the
+    // minimum difficulty of 10.
+    let exp_diff = U256::from(10);
     let nonce = sync.block_count() as u64 + 1;
     create_simple_block_impl(
         parent_hash,
@@ -89,7 +92,7 @@ fn create_simple_block(
 
 fn initialize_consensus_graph_for_test(
     genesis_block: Block, db_dir: &str, alpha_den: u64, alpha_num: u64,
-    beta: u64, h: u64,
+    beta: u64, h: u64, era_epoch_count: usize,
 ) -> (Arc<SynchronizationGraph>, Arc<ConsensusGraph>)
 {
     let ledger_db = db::open_database(
@@ -150,6 +153,7 @@ fn initialize_consensus_graph_for_test(
                 adaptive_weight_alpha_den: alpha_den,
                 adaptive_weight_beta: beta,
                 heavy_block_difficulty_ratio: h,
+                era_epoch_count,
                 enable_optimistic_execution: false,
             },
             bench_mode: true, /* Set bench_mode to true so that we skip
@@ -241,9 +245,11 @@ fn main() {
         .expect("Cannot parse the input file!");
     let h_ratio = u64::from_str(tokens.next().unwrap())
         .expect("Cannot parse the input file!");
+    let era_epoch_count = usize::from_str(tokens.next().unwrap())
+        .expect("Cannot parse the input file!");
     println!(
-        "alpha = {}/{} beta = {} h = {}",
-        alpha_num, alpha_den, beta, h_ratio
+        "alpha = {}/{} beta = {} h = {} era_epoch_count = {}",
+        alpha_num, alpha_den, beta, h_ratio, era_epoch_count
     );
 
     let (genesis_hash, genesis_block) = create_simple_block_impl(
@@ -262,6 +268,7 @@ fn main() {
         alpha_num,
         beta,
         h_ratio,
+        era_epoch_count,
     );
 
     let mut hashes = Vec::new();
