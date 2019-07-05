@@ -50,7 +50,7 @@ fn create_simple_block_impl(
 
 fn initialize_synchronization_graph(
     genesis_block: Block, db_dir: &str, alpha_den: u64, alpha_num: u64,
-    beta: u64, h: u64, era_epoch_count: usize,
+    beta: u64, h: u64, era_epoch_count: u64,
 ) -> Arc<SynchronizationGraph>
 {
     let ledger_db = db::open_database(
@@ -244,7 +244,6 @@ fn test_remove_expire_blocks() {
                 graph_status: graph_status[i as usize],
                 block_ready: false,
                 parent_reclaimed: false,
-                parent_referees_too_old: false,
                 parent: parent_index,
                 children: childrens[i as usize].clone(),
                 referees: referee[i as usize].clone(),
