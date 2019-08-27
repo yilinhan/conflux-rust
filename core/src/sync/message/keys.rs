@@ -5,13 +5,14 @@
 use crate::sync::message::msgid;
 use cfx_types::H256;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use primitives::TxPropagateId;
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub enum Key {
     Hash(H256),
     Num(u64),
-    Id(u32),
+    Id(TxPropagateId),
 }
 
 /// Common key container for all inflight requests. The supported message types

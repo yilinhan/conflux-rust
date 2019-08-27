@@ -136,7 +136,7 @@ class RemoteSimulate(ConfluxTestFramework):
         parser.add_argument(
             "--max-peers-propagation",
             dest="max_peers_propagation",
-            default=128,
+            default=8,
             type=int,
         )
         parser.add_argument(
@@ -154,7 +154,7 @@ class RemoteSimulate(ConfluxTestFramework):
         parser.add_argument(
             "--tx-pool-size",
             dest="tx_pool_size",
-            default=1000000,
+            default=10000000,
             type=int,
         )
         parser.add_argument(

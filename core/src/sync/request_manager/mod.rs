@@ -8,7 +8,6 @@ use crate::{
         message::{
             msgid, GetBlockHashesByEpoch, GetBlockHeaders, GetBlockTxn,
             GetBlocks, GetCompactBlocks, GetTransactions, Key, KeyContainer,
-            TransactionDigests,
         },
         Error,
     },
@@ -208,18 +207,12 @@ impl RequestManager {
     }
 
     pub fn request_transactions(
-        &self, io: &dyn NetworkContext, peer_id: PeerId,
-        transaction_digests: TransactionDigests,
+        &self, io: &dyn NetworkContext, peer_id: PeerId, window_index: usize,
+        received_tx_ids: &Vec<TxPropagateId>,
     )
     {
         let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
-
-        let window_index: usize = transaction_digests.window_index;
-        let random_position: u8 = transaction_digests.random_position;
-        let (random_byte_vector, fixed_bytes_vector) =
-            transaction_digests.get_decomposed_short_ids();
-
-        if fixed_bytes_vector.is_empty() {
+        if received_tx_ids.is_empty() {
             return;
         }
 
@@ -234,23 +227,19 @@ impl RequestManager {
             let mut tx_ids = HashSet::new();
             let mut indices = Vec::new();
 
-            for i in 0..fixed_bytes_vector.len() {
-                if received_transactions.contains_txid(
-                    fixed_bytes_vector[i],
-                    random_byte_vector[i],
-                    random_position,
-                ) {
+            for (idx, tx_id) in received_tx_ids.iter().enumerate() {
+                if received_transactions.contains_txid(tx_id) {
                     // Already received
                     continue;
                 }
 
-                if !inflight_keys.insert(Key::Id(fixed_bytes_vector[i])) {
+                if !inflight_keys.insert(Key::Id(*tx_id)) {
                     // Already being requested
                     continue;
                 }
 
-                indices.push(i);
-                tx_ids.insert(fixed_bytes_vector[i]);
+                indices.push(idx);
+                tx_ids.insert(*tx_id);
             }
 
             (indices, tx_ids)
@@ -262,7 +251,7 @@ impl RequestManager {
             request_id: 0,
             window_index,
             indices,
-            tx_ids: tx_ids.clone(),
+            tx_ids:tx_ids.clone(),
         };
 
         if request.is_empty() {
@@ -495,14 +484,12 @@ impl RequestManager {
     }
 
     pub fn get_sent_transactions(
-        &self, window_index: usize, indices: &Vec<usize>,
+        &self, window_index: usize,indices: &Vec<usize>,
     ) -> Vec<TransactionWithSignature> {
         let sent_transactions = self.sent_transactions.read();
         let mut txs = Vec::with_capacity(indices.len());
         for index in indices {
-            if let Some(tx) =
-                sent_transactions.get_transaction(window_index, *index)
-            {
+            if let Some(tx) = sent_transactions.get_transaction(window_index,*index) {
                 txs.push(tx.transaction.clone());
             }
         }
