@@ -46,6 +46,7 @@ priority-send-queue = { path = "../util/priority-send-queue" }
 toml = "0.4"
 metrics = { path = "../util/metrics" }
 hibitset = { path = "../util/hibitset" }
+my-minisketch = { path = "../util/my-minisketch" }
 futures = "0.1"
 memoffset = "0.5.1"
 malloc_size_of = {path = "../util/malloc_size_of"}
@@ -54,6 +55,7 @@ fallible-iterator = "0.2"
 strfmt = "0.1"
 rustc-hex = "1.0"
 parity-bytes = "0.1"
+
 
 [dev-dependencies]
 criterion = "0.2"
