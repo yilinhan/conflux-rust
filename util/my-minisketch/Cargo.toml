@@ -1,0 +1,11 @@
+[package]
+name = "my-minisketch"
+version = "0.1.0"
+authors = ["yilinhan"]
+edition = "2018"
+
+[dependencies]
+minisketch-rs = "0.1"
+cfx-types = { path = "../../cfx_types" }
+primitives = { path = "../../primitives" }
+rand = "0.6"
