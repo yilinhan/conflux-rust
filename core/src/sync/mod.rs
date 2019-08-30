@@ -273,6 +273,15 @@ pub mod msg_sender {
                 "get_block_txn_counter"
             );
     }
+    lazy_static! {
+    static ref MINI_METER: Arc<dyn Meter> =
+            register_meter_with_group("network_connection_data", "mini");
+    static ref MINI_COUNTER: Arc<dyn Meter> =
+            register_meter_with_group(
+                "network_connection_data_counter",
+                "mini_counter"
+            );
+    }
 
     pub fn send_message(
         io: &dyn NetworkContext, peer: PeerId, msg: &dyn Message,
@@ -371,6 +380,10 @@ pub mod msg_sender {
                 msgid::GET_BLOCK_HASHES_RESPONSE => {
                     GET_BLOCK_HASHES_RESPONSE_METER.mark(size);
                     GET_BLOCK_HASHES_RESPONSE_COUNTER.mark(1);
+                }
+                msgid::MINISKETCH_DIGESTS => {
+                    MINI_METER.mark(size);
+                    MINI_COUNTER.mark(1);
                 }
                 _ => {
                     OTHER_HIGH_METER.mark(size);

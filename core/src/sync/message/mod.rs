@@ -48,6 +48,6 @@ pub use self::{
     status::Status,
     transactions::{
         GetTransactions, GetTransactionsResponse, TransactionDigests,
-        Transactions,
+        Transactions,MinisketchesDigests,GetMini
     },
 };

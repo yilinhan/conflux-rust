@@ -20,6 +20,7 @@ use rlp_derive::{
     RlpDecodable, RlpDecodableWrapper, RlpEncodable, RlpEncodableWrapper,
 };
 use std::{any::Any, collections::HashSet, time::Duration};
+use elastic_array::core_::num::FpCategory::Nan;
 
 #[derive(Debug, PartialEq, RlpDecodableWrapper, RlpEncodableWrapper)]
 pub struct Transactions {
@@ -76,6 +77,108 @@ impl Handleable for Transactions {
 }
 
 /////////////////////////////////////////////////////////////////////
+
+#[derive(Debug, PartialEq)]
+pub struct GetMini {
+    pub request_id: RequestId,
+    pub ids: Vec<u64>,
+}
+impl Request for GetMini {
+    fn as_message(&self) -> &dyn Message { self }
+
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn timeout(&self, conf: &ProtocolConfiguration) -> Duration {
+        conf.transaction_request_timeout
+    }
+
+    fn on_removed(&self, inflight_keys: &KeyContainer) {
+        ()
+    }
+
+    fn with_inflight(&mut self, inflight_keys: &KeyContainer) {
+        ()
+    }
+
+    fn is_empty(&self) -> bool { self.ids.is_empty() }
+
+    fn resend(&self) -> Option<Box<dyn Request>> { None }
+}
+
+impl Handleable for GetMini{
+    fn handle(self, ctx: &Context) -> Result<(),Error>{
+        let transactions =ctx.manager.request_manager.mini_get_transactions(&self.ids);
+        let response = GetTransactionsResponse {
+            request_id: self.request_id.clone(),
+            transactions,
+        };
+        debug!(
+            "on_get_mini equest {} txs, returned {} txs",
+            self.ids.len(),
+            response.transactions.len()
+        );
+
+        ctx.send_response(&response)
+    }
+}
+
+impl Encodable for GetMini {
+    fn rlp_append(&self, stream: &mut RlpStream) {
+        stream
+            .begin_list(2)
+            .append(&self.request_id)
+            .append_list(&self.ids);
+    }
+}
+
+impl Decodable for GetMini {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        if rlp.item_count()? != 2 {
+            return Err(DecoderError::RlpIncorrectListLen);
+        }
+
+        Ok(GetMini {
+            request_id: rlp.val_at(0)?,
+            ids: rlp.list_at(1)?,
+        })
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
+pub struct MinisketchesDigests {
+    pub serialized_sketches: Vec<u8>,
+}
+
+impl Handleable for MinisketchesDigests{
+    fn handle(self, ctx: &Context) -> Result<(), Error> {
+
+        ctx.manager.request_manager.request_mini_transactions(
+            ctx.io,
+            ctx.peer,
+            &self.serialized_sketches,
+        );
+
+        Ok(())
+    }
+}
+
+impl Encodable for MinisketchesDigests {
+    fn rlp_append(&self, stream: &mut RlpStream) {
+        stream
+            .begin_list(1)
+            .append(&self.serialized_sketches);
+    }
+}
+
+impl Decodable for MinisketchesDigests {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        Ok(MinisketchesDigests {
+            serialized_sketches: rlp.val_at(0)?,
+        })
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct TransactionDigests {
     pub window_index: usize,

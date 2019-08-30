@@ -52,6 +52,9 @@ build_msgid! {
     GET_CHECKPOINT_BLAME_STATE_REQUEST = 0x1d
     GET_CHECKPOINT_BLAME_STATE_RESPONSE = 0x1e
 
+    MINISKETCH_DIGESTS=0x21
+    GET_MINI=0x22
+
     INVALID = 0xff
 }
 
@@ -125,6 +128,27 @@ impl Message for TransactionDigests {
     fn priority(&self) -> SendQueuePriority { SendQueuePriority::Normal }
 }
 
+impl Message for MinisketchesDigests {
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn msg_id(&self) -> MsgId { msgid::MINISKETCH_DIGESTS }
+
+    fn msg_name(&self) -> &'static str { "MinisketchDigests" }
+
+    fn is_size_sensitive(&self) -> bool { true }
+
+    fn priority(&self) -> SendQueuePriority { SendQueuePriority::Normal }
+}
+impl Message for GetMini {
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn msg_id(&self) -> MsgId { msgid::GET_MINI }
+
+    fn msg_name(&self) -> &'static str { "GetMini" }
+
+    fn priority(&self) -> SendQueuePriority { SendQueuePriority::Normal }
+}
+
 impl Message for GetTransactions {
     fn as_any(&self) -> &dyn Any { self }
 
@@ -155,6 +179,7 @@ build_has_request_id_impl! { GetBlocks }
 build_has_request_id_impl! { GetBlockTxn }
 build_has_request_id_impl! { GetCompactBlocks }
 build_has_request_id_impl! { GetTransactions }
+build_has_request_id_impl! { GetMini}
 
 /// handle the RLP encoded message with given context `ctx`.
 /// If the message not handled, return `Ok(false)`.
@@ -233,6 +258,9 @@ pub fn handle_rlp_message(
         }
         msgid::GET_SNAPSHOT_CHUNK_RESPONSE => {
             rlp.as_val::<SnapshotChunkResponse>()?.handle(&ctx)?;
+        }
+        msgid::GET_MINI =>{
+            rlp.as_val::<GetMini>()?.handle(&ctx)?;
         }
         _ => return Ok(false),
     }

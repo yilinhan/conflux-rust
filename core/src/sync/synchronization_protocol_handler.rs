@@ -40,6 +40,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use my_minisketch::MyMinisketch;
 
 lazy_static! {
     static ref TX_PROPAGATE_METER: Arc<dyn Meter> =
@@ -58,7 +59,7 @@ const CHECK_PEER_HEARTBEAT_TIMER: TimerToken = 6;
 const CHECK_FUTURE_BLOCK_TIMER: TimerToken = 7;
 const EXPIRE_BLOCK_GC_TIMER: TimerToken = 8;
 const HEARTBEAT_TIMER: TimerToken = 9;
-
+const MINI_TIMER: TimerToken =10;
 const MAX_TXS_BYTES_TO_PROPAGATE: usize = 1024 * 1024; // 1MB
 
 const EPOCH_SYNC_MAX_INFLIGHT: u64 = 300;
@@ -903,6 +904,33 @@ impl SynchronizationProtocolHandler {
         peer_vec
     }
 
+    fn propagate_minisketch(
+        &self, io: &dyn NetworkContext, peers: Vec<PeerId>,
+    ) {
+
+        let mut tx_msg = Box::new(MinisketchesDigests {
+            serialized_sketches:{
+                MyMinisketch::serialize_sketch(&self.request_manager.sketch.lock())
+            }
+        });
+
+        debug!(
+            "Sent sketch ids to {} peers.",
+            peers.len()
+        );
+        for peer_id in peers {
+            match send_message(io, peer_id, tx_msg.as_ref()) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!(
+                        "failed to propagate sketches ids to peer, id: {}, err: {}",
+                        peer_id, e
+                    );
+                }
+            }
+        }
+    }
+
     fn propagate_transactions_to_peers(
         &self, io: &dyn NetworkContext, peers: Vec<PeerId>,
     ) {
@@ -962,6 +990,9 @@ impl SynchronizationProtocolHandler {
 
             sent_transactions
         };
+
+
+        self.request_manager.mini_append_transactions(&sent_transactions);
 
         tx_msg.window_index = self
             .request_manager
@@ -1057,6 +1088,12 @@ impl SynchronizationProtocolHandler {
 
         let peers = self.select_peers_for_transactions();
         self.propagate_transactions_to_peers(io, peers);
+    }
+
+    pub fn propagate_minisketches(&self,io:&dyn NetworkContext){
+        let mut peers: Vec<PeerId> =
+            self.syn.peers.read().keys().cloned().collect();
+        self.propagate_minisketch(io,peers);
     }
 
     pub fn remove_expired_flying_request(&self, io: &dyn NetworkContext) {
@@ -1259,6 +1296,7 @@ impl NetworkProtocolHandler for SynchronizationProtocolHandler {
     fn initialize(&self, io: &dyn NetworkContext) {
         io.register_timer(TX_TIMER, self.protocol_config.send_tx_period)
             .expect("Error registering transactions timer");
+        io.register_timer(MINI_TIMER,Duration::from_secs(1)).expect("Error register mini timer");
         io.register_timer(
             CHECK_REQUEST_TIMER,
             self.protocol_config.check_request_period,
@@ -1360,6 +1398,9 @@ impl NetworkProtocolHandler for SynchronizationProtocolHandler {
         match timer {
             TX_TIMER => {
                 self.propagate_new_transactions(io);
+            }
+            MINI_TIMER=>{
+                self.propagate_minisketches(io);
             }
             CHECK_FUTURE_BLOCK_TIMER => {
                 self.check_future_blocks(io);

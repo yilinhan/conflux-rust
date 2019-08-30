@@ -8,6 +8,7 @@ use crate::{
         message::{
             msgid, GetBlockHashesByEpoch, GetBlockHeaders, GetBlockTxn,
             GetBlocks, GetCompactBlocks, GetTransactions, Key, KeyContainer,
+            GetMini,
         },
         Error,
     },
@@ -16,7 +17,7 @@ use cfx_types::H256;
 use metrics::{register_meter_with_group, Meter, MeterTimer, Gauge,GaugeUsize};
 use network::{NetworkContext, PeerId};
 use parking_lot::{Mutex, RwLock};
-use primitives::{SignedTransaction, TransactionWithSignature, TxPropagateId};
+use primitives::{SignedTransaction, TransactionWithSignature, TxPropagateId, Transaction};
 pub use request_handler::{
     Request, RequestHandler, RequestMessage, SynchronizationPeerRequest,
 };
@@ -30,6 +31,9 @@ use tx_handler::{ReceivedTransactionContainer, SentTransactionContainer};
 
 mod request_handler;
 pub mod tx_handler;
+use my_minisketch::MyMinisketch;
+use minisketch_rs::Minisketch;
+use std::collections::HashMap;
 
 lazy_static! {
     static ref TX_REQUEST_METER: Arc<dyn Meter> =
@@ -40,13 +44,12 @@ lazy_static! {
         register_meter_with_group("timer", "request_manager::request_tx");
     static ref TX_RECEIVED_POOL_METER: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "tx_received_pool_size");
-    static ref INFLIGHT_TX_POOL_GAUGE: Arc<dyn Gauge<usize>> =
-        GaugeUsize::register_with_group(
-            "system_metrics",
-            "inflight_tx_pool_size"
-        );
-    static ref INFLIGHT_TX_REJECT_METER: Arc<dyn Meter> =
-        register_meter_with_group("system_metrics", "inflight_tx_reject_size");
+    static ref INFLIGHT_TX_POOL_METER: Arc<dyn Meter> =
+        register_meter_with_group("system_metrics", "inflight_tx_pool_size");
+    static ref DIFFERENCE_FOUND: Arc<Meter> =
+        register_meter_with_group("system_metrics", "difference_found");
+    static ref DECODE_ERROR_COUNT: Arc<Meter> =
+        register_meter_with_group("system_metrics", "decode_error_count");
 }
 
 #[derive(Debug)]
@@ -80,6 +83,8 @@ pub struct RequestManager {
     /// This is used to handle request_id matching
     request_handler: Arc<RequestHandler>,
     syn: Arc<SynchronizationState>,
+    pub mini_transacions_pool:RwLock<HashMap<u64,Arc<SignedTransaction>>>,
+    pub sketch: Mutex<Minisketch>,
 }
 
 impl RequestManager {
@@ -106,6 +111,8 @@ impl RequestManager {
             waiting_requests: Default::default(),
             request_handler: Arc::new(RequestHandler::new(protocol_config)),
             syn,
+            mini_transacions_pool: RwLock::new(HashMap::new()),
+            sketch: Mutex::new(MyMinisketch::create_empty_minisketch())
         }
     }
 
@@ -209,6 +216,54 @@ impl RequestManager {
         };
 
         self.request_with_delay(io, Box::new(request), peer_id, None);
+    }
+    pub fn request_mini_transactions(&self, io:&dyn NetworkContext, peer_id:PeerId,serialized_sketches: &Vec<u8>){
+        let remote_sketch =MyMinisketch::deserialize_sketch(serialized_sketches);
+        let mut local_sketch = {
+            self.sketch.lock().clone()
+        };
+        let results= MyMinisketch::reconcile(&mut local_sketch, & remote_sketch);
+        let mut difference = Vec::new();
+        let mini_pool=self.mini_transacions_pool.read();
+        let mut sym_diff= 0;
+        let mut error_count =0;
+        let mut all_diff = Vec::new();
+
+        match results{
+            Ok(x) => {
+                DIFFERENCE_FOUND.mark(x.len());
+                sym_diff=sym_diff+x.len();
+                for v in x {
+                    all_diff.push(v);
+                    if !mini_pool.contains_key(&v){
+                        difference.push(v);
+                    }
+                }
+            },
+            Err(_) => {
+                error_count=error_count+1;
+                DECODE_ERROR_COUNT.mark(1);
+            }
+            _ => {}
+        }
+
+
+        let request = GetMini {
+            request_id: 0,
+            ids:all_diff.clone(),
+        };
+
+        if request.is_empty() {
+            return;
+        }
+
+        if self
+            .request_handler
+            .send_request(io, Some(peer_id), Box::new(request), None)
+            .is_err()
+        {
+        }
+
     }
 
     pub fn request_transactions(
@@ -475,6 +530,25 @@ impl RequestManager {
             inflight_keys.remove(&Key::Id(*tx));
         }
         self.append_received_transactions(signed_transactions);
+    }
+
+    pub fn mini_append_transactions(&self, transactions:& Vec<Arc<SignedTransaction>>){
+        let mut mini_pool = self.mini_transacions_pool.write();
+        let mut my_sketch = self.sketch.lock();
+        for tx in transactions{
+            if !mini_pool.contains_key( &tx.hash.low_u64()){
+                MyMinisketch::add_to_sketch(&mut my_sketch,tx.hash.low_u64());
+            }
+            mini_pool.insert(tx.hash.low_u64(),tx.clone());
+        }
+    }
+    pub fn mini_get_transactions(&self,ids:&Vec<u64>) -> Vec<TransactionWithSignature>{
+        let mini_pool = self.mini_transacions_pool.read();
+        let mut txs = Vec::with_capacity(ids.len());
+        for id in ids{
+            txs.push(mini_pool.get(&id).unwrap().transaction.clone());
+        }
+        txs
     }
 
     pub fn get_sent_transactions(
