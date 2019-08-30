@@ -47,6 +47,7 @@ toml = "0.4"
 metrics = { path = "../util/metrics" }
 hibitset = { path = "../util/hibitset" }
 my-minisketch = { path = "../util/my-minisketch" }
+minisketch-rs = "0.1"
 futures = "0.1"
 memoffset = "0.5.1"
 malloc_size_of = {path = "../util/malloc_size_of"}
