@@ -235,6 +235,9 @@ pub fn handle_rlp_message(
         msgid::TRANSACTION_DIGESTS => {
             rlp.as_val::<TransactionDigests>()?.handle(&ctx)?;
         }
+        msgid::MINISKETCH_DIGESTS => {
+            rlp.as_val::<MinisketchesDigests>()?.handle(&ctx)?;
+        }
         msgid::GET_TRANSACTIONS => {
             rlp.as_val::<GetTransactions>()?.handle(&ctx)?;
         }
