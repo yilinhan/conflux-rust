@@ -529,6 +529,7 @@ impl RequestManager {
         for tx in received_transactions {
             inflight_keys.remove(&Key::Id(*tx));
         }
+
         self.append_received_transactions(signed_transactions);
     }
 
@@ -575,6 +576,7 @@ impl RequestManager {
     pub fn append_received_transactions(
         &self, transactions: Vec<Arc<SignedTransaction>>,
     ) {
+        self.mini_append_transactions(&transactions);
         self.received_transactions
             .write()
             .append_transactions(transactions)

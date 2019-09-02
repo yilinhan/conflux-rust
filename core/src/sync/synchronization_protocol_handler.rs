@@ -992,8 +992,6 @@ impl SynchronizationProtocolHandler {
         };
 
 
-        self.request_manager.mini_append_transactions(&sent_transactions);
-
         tx_msg.window_index = self
             .request_manager
             .append_sent_transactions(sent_transactions);
