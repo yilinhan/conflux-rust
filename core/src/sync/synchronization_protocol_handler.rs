@@ -41,6 +41,9 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+
+use byteorder::{ByteOrder, LittleEndian};
+
 lazy_static! {
     static ref TX_PROPAGATE_METER: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "tx_propagate_set_size");
@@ -903,6 +906,47 @@ impl SynchronizationProtocolHandler {
         peer_vec
     }
 
+    fn sipround(v0: &mut u64, v1: &mut u64, v2: &mut u64, v3: &mut u64) {
+        *v0 = v0.wrapping_add(*v1);
+        *v2 = v2.wrapping_add(*v3);
+        *v1 = v1.rotate_left(13);
+
+        *v3 = v3.rotate_left(16);
+        *v1 ^= *v0;
+        *v3 ^= *v2;
+
+        *v0 = v0.rotate_left(32);
+        *v2 = v2.wrapping_add(*v1);
+        *v0 = v0.wrapping_add(*v3);
+
+        *v1 = v1.rotate_left(17);
+        *v3 = v3.rotate_left(21);
+
+        *v1 ^= *v2;
+        *v3 ^= *v0;
+        *v2 = v2.rotate_left(32);
+    }
+
+    pub fn siphash24(nonce:u64,value:H256)-> u64{
+        let mut bytes = [0; 4];
+        //value.copy(to)
+        LittleEndian::read_u64_into(&value[0..32], &mut bytes);
+        let mut v0 = bytes[0];
+        let mut v1 =  bytes[1];
+        let mut v2 =  bytes[2];
+        let mut v3 =  bytes[3];
+        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+        v0 ^= nonce;
+        v2 ^= 0xff;
+        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
+
+        v0 ^ v1 ^ v2 ^ v3
+    }
+
     fn propagate_transactions_to_peers(
         &self, io: &dyn NetworkContext, peers: Vec<PeerId>,
     ) {
@@ -966,20 +1010,20 @@ impl SynchronizationProtocolHandler {
 
         let total_peer_num= lucky_peers.len();
         let mut msgs=Vec::new();
-        for i in 0..lucky_peers_peers.len(){
+        for i in 0..lucky_peers.len(){
             let mut sip_short_ids = Vec::new();
             for item in &sent_transactions{
-                sip_short_ids.push(siphash24(i,*item.hash) as u32);
+                sip_short_ids.push(SynchronizationProtocolHandler::siphash24(i as u64,item.hash) as u32);
             }
             msgs.push( Box::new(TransactionDigests {
                 window_index: window_index,
-                nonce:i,
+                nonce:i as u64,
                 trans_short_ids: sip_short_ids,
             }))
         }
 
 
-        TX_PROPAGATE_METER.mark(mgs[0].trans_short_ids.len());
+        TX_PROPAGATE_METER.mark(msgs[0].trans_short_ids.len());
 
         if msgs[0].trans_short_ids.is_empty() {
             return;
@@ -995,14 +1039,14 @@ impl SynchronizationProtocolHandler {
                 Ok(_) => {
                     trace!(
                         "{:02} <- Transactions ({} entries)",
-                        peer_id,
-                        tx_msg.trans_short_ids.len()
+                        lucky_peers[i],
+                        msgs[i].trans_short_ids.len()
                     );
                 }
                 Err(e) => {
                     warn!(
                         "failed to propagate transaction ids to peer, id: {}, err: {}",
-                        peer_id, e
+                        lucky_peers[i], e
                     );
                 }
             }

@@ -6,6 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use crate::sync::SynchronizationProtocolHandler;
+
 use cfx_types::H256;
 lazy_static! {
     static ref TX_FIRST_MISS_METER: Arc<dyn Meter> =
@@ -67,7 +68,7 @@ impl ReceivedTransactionContainer {
 
     pub fn contains_txid(&self, key: &TxPropagateId,nonce : u64) -> bool {
         let inner = &self.inner;
-        inner.txid_container[nonce].contains(key)
+        inner.txid_container[nonce as usize].contains(key)
     }
 
     pub fn get_length(&self) -> usize { self.inner.txid_container[0].len() }
@@ -110,10 +111,11 @@ impl ReceivedTransactionContainer {
             indices_with_time
         };
 
-        for tx_id in tx_ids {
-                if !self.contains_txid(&(SynchronizationProtocolHandler::siphash24(i as u64,*tx_id) as u32), 0){
+        for tx_id
+            in tx_ids {
+                if ! inner.txid_container[0].contains(&(SynchronizationProtocolHandler::siphash24(0 as u64,tx_id) as u32)){
                     for i in 0..inner.txid_container.len(){
-                        inner.txid_container[i].insert(&(SynchronizationProtocolHandler::siphash24(i as u64,*tx_id) as u32));
+                        inner.txid_container[i].insert(SynchronizationProtocolHandler::siphash24(i as u64,tx_id) as u32);
                     }
                     entry.tx_ids.push(tx_id);
                 }
