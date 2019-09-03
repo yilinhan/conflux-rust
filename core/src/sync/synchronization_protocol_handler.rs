@@ -930,10 +930,7 @@ impl SynchronizationProtocolHandler {
         if lucky_peers.is_empty() {
             return;
         }
-        let mut tx_msg = Box::new(TransactionDigests {
-            window_index: 0,
-            trans_short_ids: Vec::new(),
-        });
+
 
         let sent_transactions = {
             let mut transactions = self.get_to_propagate_trans();
@@ -963,22 +960,38 @@ impl SynchronizationProtocolHandler {
             sent_transactions
         };
 
-        tx_msg.window_index = self
+        let window_index = self
             .request_manager
-            .append_sent_transactions(sent_transactions);
-        TX_PROPAGATE_METER.mark(tx_msg.trans_short_ids.len());
+            .append_sent_transactions(sent_transactions.clone());
 
-        if tx_msg.trans_short_ids.is_empty() {
+        let total_peer_num= lucky_peers.len();
+        let mut msgs=Vec::new();
+        for i in 0..lucky_peers_peers.len(){
+            let mut sip_short_ids = Vec::new();
+            for item in &sent_transactions{
+                sip_short_ids.push(siphash24(i,*item.hash) as u32);
+            }
+            msgs.push( Box::new(TransactionDigests {
+                window_index: window_index,
+                nonce:i,
+                trans_short_ids: sip_short_ids,
+            }))
+        }
+
+
+        TX_PROPAGATE_METER.mark(mgs[0].trans_short_ids.len());
+
+        if msgs[0].trans_short_ids.is_empty() {
             return;
         }
 
         debug!(
             "Sent {} transaction ids to {} peers.",
-            tx_msg.trans_short_ids.len(),
+            msgs[0].trans_short_ids.len(),
             lucky_peers.len()
         );
-        for peer_id in lucky_peers {
-            match send_message(io, peer_id, tx_msg.as_ref()) {
+        for i in 0..lucky_peers.len() {
+            match send_message(io, lucky_peers[i], msgs[i].as_ref()) {
                 Ok(_) => {
                     trace!(
                         "{:02} <- Transactions ({} entries)",

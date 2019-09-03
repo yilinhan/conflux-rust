@@ -97,6 +97,7 @@ impl RequestManager {
             received_transactions: Arc::new(RwLock::new(
                 ReceivedTransactionContainer::new(
                     received_tx_index_maintain_timeout.as_secs(),
+                            protocol_config.min_peers_propagation,
                 ),
             )),
             sent_transactions: RwLock::new(SentTransactionContainer::new(
@@ -212,7 +213,7 @@ impl RequestManager {
     }
 
     pub fn request_transactions(
-        &self, io: &dyn NetworkContext, peer_id: PeerId, window_index: usize,
+        &self, io: &dyn NetworkContext, peer_id: PeerId, window_index: usize, nonce:u64,
         received_tx_ids: &Vec<TxPropagateId>,
     )
     {
@@ -233,7 +234,7 @@ impl RequestManager {
             let mut indices = Vec::new();
 
             for (idx, tx_id) in received_tx_ids.iter().enumerate() {
-                if received_transactions.contains_txid(tx_id) {
+                if received_transactions.contains_txid(tx_id,nonce) {
                     // Already received
                     continue;
                 }

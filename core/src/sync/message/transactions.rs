@@ -79,6 +79,7 @@ impl Handleable for Transactions {
 #[derive(Debug, PartialEq)]
 pub struct TransactionDigests {
     pub window_index: usize,
+    pub nonce : u64,
     pub trans_short_ids: Vec<TxPropagateId>,
 }
 
@@ -108,6 +109,7 @@ impl Handleable for TransactionDigests {
             ctx.io,
             ctx.peer,
             self.window_index,
+            self.nonce,
             &self.trans_short_ids,
         );
 
@@ -118,8 +120,9 @@ impl Handleable for TransactionDigests {
 impl Encodable for TransactionDigests {
     fn rlp_append(&self, stream: &mut RlpStream) {
         stream
-            .begin_list(2)
+            .begin_list(3)
             .append(&self.window_index)
+            .append(&self.nonce)
             .append_list(&self.trans_short_ids);
     }
 }
@@ -128,7 +131,8 @@ impl Decodable for TransactionDigests {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
         Ok(TransactionDigests {
             window_index: rlp.val_at(0)?,
-            trans_short_ids: rlp.list_at(1)?,
+            nonce:rlp.val_at(1)?,
+            trans_short_ids: rlp.list_at(2)?,
         })
     }
 }
