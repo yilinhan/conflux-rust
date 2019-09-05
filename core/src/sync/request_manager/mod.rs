@@ -250,7 +250,7 @@ impl RequestManager {
 
         let request = GetMini {
             request_id: 0,
-            ids:all_diff.clone(),
+            ids:difference.clone(),
         };
 
         if request.is_empty() {
