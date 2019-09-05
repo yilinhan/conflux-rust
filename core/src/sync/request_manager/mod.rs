@@ -50,6 +50,8 @@ lazy_static! {
         register_meter_with_group("system_metrics", "difference_found_meter");
     static ref DECODE_ERROR_COUNT: Arc<Meter> =
         register_meter_with_group("system_metrics", "decode_error_count");
+    static ref DECODE_COUNT: Arc<Meter> =
+        register_meter_with_group("system_metrics", "decode_total_count");
     static ref TX_POOL_DIFFERENCE_FOUDN_GAUGE: Arc<dyn Gauge<usize>> =
         GaugeUsize::register_with_group("txpool", "difference_found_gauge");
 }
@@ -230,7 +232,7 @@ impl RequestManager {
         let mut sym_diff= 0;
         let mut error_count =0;
         let mut all_diff = Vec::new();
-
+        DECODE_COUNT.mark(1);
         match results{
             Ok(x) => {
                 DIFFERENCE_FOUND.mark(x.len());
