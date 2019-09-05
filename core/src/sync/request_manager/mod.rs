@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use cfx_types::H256;
-use metrics::{register_meter_with_group, Meter, MeterTimer, Gauge,GaugeUsize};
+use metrics::{register_meter_with_group, Meter, MeterTimer,Gauge,GaugeUsize};
 use network::{NetworkContext, PeerId};
 use parking_lot::{Mutex, RwLock};
 use primitives::{SignedTransaction, TransactionWithSignature, TxPropagateId, Transaction};
@@ -47,9 +47,11 @@ lazy_static! {
     static ref INFLIGHT_TX_POOL_METER: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "inflight_tx_pool_size");
     static ref DIFFERENCE_FOUND: Arc<Meter> =
-        register_meter_with_group("system_metrics", "difference_found");
+        register_meter_with_group("system_metrics", "difference_found_meter");
     static ref DECODE_ERROR_COUNT: Arc<Meter> =
         register_meter_with_group("system_metrics", "decode_error_count");
+    static ref TX_POOL_DIFFERENCE_FOUDN_GAUGE: Arc<dyn Gauge<usize>> =
+        GaugeUsize::register_with_group("txpool", "difference_found_gauge");
 }
 
 #[derive(Debug)]
@@ -232,6 +234,7 @@ impl RequestManager {
         match results{
             Ok(x) => {
                 DIFFERENCE_FOUND.mark(x.len());
+                TX_POOL_DIFFERENCE_FOUDN_GAUGE.update(x.len());
                 sym_diff=sym_diff+x.len();
                 for v in x {
                     all_diff.push(v);
