@@ -911,7 +911,7 @@ impl SynchronizationProtocolHandler {
         if self.request_manager.mini_transacions_pool.read().len() >0 {
             let mut tx_msg = Box::new(MinisketchesDigests {
                 serialized_sketches: {
-                    MyMinisketch::serialize_sketch(&self.request_manager.sketch.lock())
+                    MyMinisketch::serialize_sketch(&{self.request_manager.sketch.lock().clone()})
                 }
             });
 
