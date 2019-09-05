@@ -908,24 +908,26 @@ impl SynchronizationProtocolHandler {
         &self, io: &dyn NetworkContext, peers: Vec<PeerId>,
     ) {
 
-        let mut tx_msg = Box::new(MinisketchesDigests {
-            serialized_sketches:{
-                MyMinisketch::serialize_sketch(&self.request_manager.sketch.lock())
-            }
-        });
+        if self.request_manager.mini_transacions_pool.read().len() >0 {
+            let mut tx_msg = Box::new(MinisketchesDigests {
+                serialized_sketches: {
+                    MyMinisketch::serialize_sketch(&self.request_manager.sketch.lock())
+                }
+            });
 
-        debug!(
-            "Sent sketch ids to {} peers.",
-            peers.len()
-        );
-        for peer_id in peers {
-            match send_message(io, peer_id, tx_msg.as_ref()) {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!(
-                        "failed to propagate sketches ids to peer, id: {}, err: {}",
-                        peer_id, e
-                    );
+            debug!(
+                "Sent sketch ids to {} peers.",
+                peers.len()
+            );
+            for peer_id in peers {
+                match send_message(io, peer_id, tx_msg.as_ref()) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!(
+                            "failed to propagate sketches ids to peer, id: {}, err: {}",
+                            peer_id, e
+                        );
+                    }
                 }
             }
         }
