@@ -904,6 +904,20 @@ impl SynchronizationProtocolHandler {
         peer_vec
     }
 
+    fn select_peers_for_mini_transactions(&self) -> Vec<PeerId> {
+        let num_peers = self.syn.peers.read().len() as f64;
+        let throttle_ratio = THROTTLING_SERVICE.read().get_throttling_ratio();
+
+        // min(sqrt(x)/x, throttle_ratio)
+        let chosen_size = (num_peers.powf(-0.5).min(throttle_ratio) * num_peers)
+            .round() as usize;
+        let mut peer_vec = self.syn.get_random_peers(
+            chosen_size.max(8),
+        );
+        peer_vec.truncate(self.protocol_config.max_peers_propagation);
+        peer_vec
+    }
+
     fn propagate_minisketch(
         &self, io: &dyn NetworkContext, peers: Vec<PeerId>,
     ) {
@@ -1091,8 +1105,9 @@ impl SynchronizationProtocolHandler {
     }
 
     pub fn propagate_minisketches(&self,io:&dyn NetworkContext){
-        let mut peers: Vec<PeerId> =
-            self.syn.peers.read().keys().cloned().collect();
+//        let mut peers: Vec<PeerId> =
+//            self.syn.peers.read().keys().cloned().collect();
+        let peers = self.select_peers_for_mini_transactions();
         self.propagate_minisketch(io,peers);
     }
 
