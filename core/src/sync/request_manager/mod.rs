@@ -258,7 +258,7 @@ impl RequestManager {
         if request.is_empty() {
             return;
         }
-        debug!("Request mini {} tx from peer={},{:?}", difference.len(), peer_id, difference);
+        debug!("Request mini {} tx from peer={},{:?}", difference.len(), peer_id);
 
         if self
             .request_handler
@@ -543,7 +543,6 @@ impl RequestManager {
             if !mini_pool.contains_key( &tx.hash.low_u64()){
                 MyMinisketch::add_to_sketch(&mut my_sketch,tx.hash.low_u64());
             }
-            debug!("Append mini{:?}",tx.hash.low_u64());
             mini_pool.insert(tx.hash.low_u64(),tx.clone());
         }
     }
