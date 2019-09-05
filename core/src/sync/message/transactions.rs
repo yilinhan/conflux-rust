@@ -339,13 +339,6 @@ impl Handleable for GetTransactionsResponse {
 
         debug!("on_get_transactions_response {:?}", self.request_id);
 
-        let req = ctx.match_request(self.request_id)?;
-        let req = req.downcast_ref::<GetTransactions>(
-            ctx.io,
-            &ctx.manager.request_manager,
-            false,
-        )?;
-
         // FIXME: Do some check based on transaction request.
 
         debug!(
@@ -363,7 +356,7 @@ impl Handleable for GetTransactionsResponse {
 
         ctx.manager
             .request_manager
-            .transactions_received(&req.tx_ids, signed_trans);
+            .transactions_received(&(signed_trans.clone().into_iter().map(|tx| tx.hash()).collect()), signed_trans);
 
         debug!("Transactions successfully inserted to transaction pool");
 
