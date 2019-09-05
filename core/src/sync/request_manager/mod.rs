@@ -258,7 +258,7 @@ impl RequestManager {
         if request.is_empty() {
             return;
         }
-        debug!("Request mini {} tx from peer={},{:?}", difference.len(), peer_id);
+        debug!("Request mini {} tx from peer={}", difference.len(), peer_id);
 
         if self
             .request_handler
