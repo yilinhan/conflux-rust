@@ -78,7 +78,7 @@ impl ReceivedTransactionContainer {
     ) {
         let tx_ids = transactions
             .iter()
-            .map(|tx| TxPropagateId::from_slice(tx.hash().as_bytes()))
+            .map(|tx| tx.hash())
             .collect::<Vec<_>>();
 
         let inner = &mut self.inner;
