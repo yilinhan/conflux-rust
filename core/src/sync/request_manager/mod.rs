@@ -13,7 +13,7 @@ use crate::{
     },
 };
 use cfx_types::H256;
-use metrics::{register_meter_with_group, Meter, MeterTimer};
+use metrics::{register_meter_with_group, Meter, MeterTimer, Gauge,GaugeUsize};
 use network::{NetworkContext, PeerId};
 use parking_lot::{Mutex, RwLock};
 use primitives::{SignedTransaction, TransactionWithSignature, TxPropagateId};
@@ -40,8 +40,13 @@ lazy_static! {
         register_meter_with_group("timer", "request_manager::request_tx");
     static ref TX_RECEIVED_POOL_METER: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "tx_received_pool_size");
-    static ref INFLIGHT_TX_POOL_METER: Arc<dyn Meter> =
-        register_meter_with_group("system_metrics", "inflight_tx_pool_size");
+    static ref INFLIGHT_TX_POOL_GAUGE: Arc<dyn Gauge<usize>> =
+        GaugeUsize::register_with_group(
+            "system_metrics",
+            "inflight_tx_pool_size"
+        );
+    static ref INFLIGHT_TX_REJECT_METER: Arc<dyn Meter> =
+        register_meter_with_group("system_metrics", "inflight_tx_reject_size");
 }
 
 #[derive(Debug)]
@@ -220,7 +225,7 @@ impl RequestManager {
             self.inflight_keys.write(msgid::GET_TRANSACTIONS);
         let received_transactions = self.received_transactions.read();
 
-        INFLIGHT_TX_POOL_METER.mark(inflight_keys.len());
+        INFLIGHT_TX_POOL_GAUGE.update(inflight_keys.len());
         TX_RECEIVED_POOL_METER.mark(received_transactions.get_length());
 
         let (indices, tx_ids) = {
