@@ -221,11 +221,10 @@ impl RequestManager {
             return;
         }
 
-        let mut inflight_keys =
-            self.inflight_keys.write(msgid::GET_TRANSACTIONS);
+
         let received_transactions = self.received_transactions.read();
 
-        INFLIGHT_TX_POOL_GAUGE.update(inflight_keys.len());
+
         TX_RECEIVED_POOL_METER.mark(received_transactions.get_length());
 
         let (indices, tx_ids) = {
@@ -235,11 +234,6 @@ impl RequestManager {
             for (idx, tx_id) in received_tx_ids.iter().enumerate() {
                 if received_transactions.contains_txid(tx_id) {
                     // Already received
-                    continue;
-                }
-
-                if !inflight_keys.insert(Key::Id(*tx_id)) {
-                    // Already being requested
                     continue;
                 }
 
@@ -268,9 +262,7 @@ impl RequestManager {
             .send_request(io, Some(peer_id), Box::new(request), None)
             .is_err()
         {
-            for id in tx_ids {
-                inflight_keys.remove(&Key::Id(id));
-            }
+            //do nothing
         }
     }
 
