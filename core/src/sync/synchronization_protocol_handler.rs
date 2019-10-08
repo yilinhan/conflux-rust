@@ -17,7 +17,7 @@ use crate::{
         message::{
             handle_rlp_message, msgid, Context, DynamicCapability,
             GetBlockHeadersResponse, NewBlockHashes, Status,
-            TransactionDigests,
+            TransactionDigests,MinisketchesDigests
         },
         state::SnapshotChunkSync,
         synchronization_phases::{SyncPhaseType, SynchronizationPhaseManager},

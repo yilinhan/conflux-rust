@@ -46,11 +46,11 @@ lazy_static! {
         register_meter_with_group("system_metrics", "tx_received_pool_size");
     static ref INFLIGHT_TX_POOL_METER: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "inflight_tx_pool_size");
-    static ref DIFFERENCE_FOUND: Arc<Meter> =
+    static ref DIFFERENCE_FOUND: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "difference_found_meter");
-    static ref DECODE_ERROR_COUNT: Arc<Meter> =
+    static ref DECODE_ERROR_COUNT: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "decode_error_count");
-    static ref DECODE_COUNT: Arc<Meter> =
+    static ref DECODE_COUNT: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "decode_total_count");
     static ref TX_POOL_DIFFERENCE_FOUDN_GAUGE: Arc<dyn Gauge<usize>> =
         GaugeUsize::register_with_group("txpool", "difference_found_gauge");
@@ -542,10 +542,10 @@ impl RequestManager {
         let mut mini_pool = self.mini_transacions_pool.write();
         let mut my_sketch = self.sketch.lock();
         for tx in transactions{
-            if !mini_pool.contains_key( &tx.hash.low_u64()){
-                MyMinisketch::add_to_sketch(&mut my_sketch,tx.hash.low_u64());
+            if !mini_pool.contains_key( &tx.hash.to_low_u64_le()){
+                MyMinisketch::add_to_sketch(&mut my_sketch,tx.hash.to_low_u64_le());
             }
-            mini_pool.insert(tx.hash.low_u64(),tx.clone());
+            mini_pool.insert(tx.hash.to_low_u64_le(),tx.clone());
         }
     }
     pub fn mini_get_transactions(&self,ids:&Vec<u64>) -> Vec<TransactionWithSignature>{
