@@ -1,4 +1,4 @@
-#!/bin/bash
+\#!/bin/bash
 set -e
 export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
 SCRIPT_DIR="$( cd "$(dirname "$0")" ; pwd -P )"
@@ -8,11 +8,11 @@ if [ $# -lt 3 ]; then
     exit 1
 elif [ $# -eq 4 ]; then
     image="$4"
-    type="m5.xlarge"
+    type="m5.2xlarge"
     public=""
 elif [[ -f slave_image ]]; then
     image=`cat slave_image`
-    type="m5.xlarge"
+    type="m5.2xlarge"
     public=""
 else
     # create master instances
