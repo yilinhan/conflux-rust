@@ -120,7 +120,7 @@ build_config! {
         (max_peers_propagation, (usize), 128)
         (future_block_buffer_capacity, (usize), 32768)
         (txgen_account_count, (usize), 10)
-        (tx_cache_count, (usize), 250000)
+        (tx_cache_count, (usize), 1500000)
         (max_download_state_peers, (usize), 8)
         (block_db_type, (String), "rocksdb".to_string())
         (rocksdb_disable_wal, (bool), false)
