@@ -16,6 +16,7 @@ use crate::{
 pub use priority_send_queue::SendQueuePriority;
 use rlp::Rlp;
 use std::any::Any;
+use crate::sync::message::transactions::GetTransactionsFromLongIdResponse;
 
 // generate `pub mod msgid`
 build_msgid! {
@@ -48,9 +49,11 @@ build_msgid! {
     GET_SNAPSHOT_MANIFEST_RESPONSE = 0x1a
     GET_SNAPSHOT_CHUNK = 0x1b
     GET_SNAPSHOT_CHUNK_RESPONSE = 0x1c
+    GET_TRANSACTIONS_FROM_LONG_ID = 0x1d
+    GET_TRANSACTIONS_FROM_LONG_ID_RESPONSE = 0x1e
 
-    GET_CHECKPOINT_BLAME_STATE_REQUEST = 0x1d
-    GET_CHECKPOINT_BLAME_STATE_RESPONSE = 0x1e
+    GET_CHECKPOINT_BLAME_STATE_REQUEST = 0x1f
+    GET_CHECKPOINT_BLAME_STATE_RESPONSE = 0x20
 
     INVALID = 0xff
 }
@@ -135,7 +138,29 @@ impl Message for GetTransactions {
     fn priority(&self) -> SendQueuePriority { SendQueuePriority::Normal }
 }
 
+impl Message for GetTransactionsFromLongId {
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn msg_id(&self) -> MsgId { msgid::GET_TRANSACTIONS_FROM_LONG_ID }
+
+    fn msg_name(&self) -> &'static str { "GetTransactionsFromLongId" }
+
+    fn priority(&self) -> SendQueuePriority { SendQueuePriority::Normal }
+}
+
 impl Message for GetTransactionsResponse {
+    fn as_any(&self) -> &dyn Any { self }
+
+    fn msg_id(&self) -> MsgId { msgid::GET_TRANSACTIONS_RESPONSE }
+
+    fn msg_name(&self) -> &'static str { "GetTransactionsResponse" }
+
+    fn is_size_sensitive(&self) -> bool { self.transactions.len() > 0 }
+
+    fn priority(&self) -> SendQueuePriority { SendQueuePriority::Normal }
+}
+
+impl Message for GetTransactionsFromLongIdResponse {
     fn as_any(&self) -> &dyn Any { self }
 
     fn msg_id(&self) -> MsgId { msgid::GET_TRANSACTIONS_RESPONSE }
@@ -155,6 +180,7 @@ build_has_request_id_impl! { GetBlocks }
 build_has_request_id_impl! { GetBlockTxn }
 build_has_request_id_impl! { GetCompactBlocks }
 build_has_request_id_impl! { GetTransactions }
+build_has_request_id_impl! { GetTransactionsFromLongId}
 
 /// handle the RLP encoded message with given context `ctx`.
 /// If the message not handled, return `Ok(false)`.
@@ -213,8 +239,14 @@ pub fn handle_rlp_message(
         msgid::GET_TRANSACTIONS => {
             rlp.as_val::<GetTransactions>()?.handle(&ctx)?;
         }
+        msgid::GET_TRANSACTIONS_FROM_LONG_ID=>{
+            rlp.as_val::<GetTransactionsFromLongId>()?.handle(&ctx)?;
+        }
         msgid::GET_TRANSACTIONS_RESPONSE => {
             rlp.as_val::<GetTransactionsResponse>()?.handle(&ctx)?;
+        }
+        msgid::GET_TRANSACTIONS_FROM_LONG_ID_RESPONSE=>{
+            rlp.as_val::<GetTransactionsFromLongIdResponse>()?.handle(&ctx)?;
         }
         msgid::GET_BLOCK_HASHES_BY_EPOCH => {
             rlp.as_val::<GetBlockHashesByEpoch>()?.handle(&ctx)?;

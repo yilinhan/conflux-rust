@@ -47,7 +47,7 @@ pub use self::{
     new_block_hashes::NewBlockHashes,
     status::Status,
     transactions::{
-        GetTransactions, GetTransactionsResponse, TransactionDigests,
+        GetTransactions,GetTransactionsFromLongId, GetTransactionsResponse, TransactionDigests,
         Transactions,
     },
 };
