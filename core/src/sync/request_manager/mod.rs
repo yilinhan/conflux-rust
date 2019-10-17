@@ -30,6 +30,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tx_handler::{ReceivedTransactionContainer, SentTransactionContainer,InflightPendingTrasnactionItem,InflightPendingTransactionContainer};
+use hibitset::BitSetLike;
 
 mod request_handler;
 pub mod tx_handler;
@@ -249,7 +250,7 @@ impl RequestManager {
         let trans_long_ids: &Vec<H256> = &transaction_digests.trans_long_ids;
 
 
-        if fixed_bytes_vector.is_empty() {
+        if fixed_bytes_vector.is_empty() && trans_long_ids.is_empty(){
             return;
         }
 
