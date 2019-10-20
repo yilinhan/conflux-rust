@@ -10,7 +10,7 @@ pub struct MyMinisketch {
 
 impl MyMinisketch {
     pub const ELEMENT_SIZE_IN_BITS:u32 =  (std::mem::size_of::<SketchElementSize>() * 8)  as u32;
-    pub const CAPACITY:usize= 100;
+    pub const CAPACITY:usize= 600;
     pub const IMPLEMENTATION:u32 =0;
     pub const BUCKET_NUM:usize =1;
 

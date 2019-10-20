@@ -42,6 +42,8 @@ lazy_static! {
         register_meter_with_group("timer", "request_manager::request_not_tx");
     static ref REQUEST_MANAGER_TX_TIMER: Arc<dyn Meter> =
         register_meter_with_group("timer", "request_manager::request_tx");
+    static ref REQUEST_MINI_TX_TIMER: Arc<dyn Meter> =
+        register_meter_with_group("timer", "request_manager::request_mini_tx");
     static ref TX_RECEIVED_POOL_METER: Arc<dyn Meter> =
         register_meter_with_group("system_metrics", "tx_received_pool_size");
     static ref INFLIGHT_TX_POOL_METER: Arc<dyn Meter> =
@@ -222,6 +224,7 @@ impl RequestManager {
         self.request_with_delay(io, Box::new(request), peer_id, None);
     }
     pub fn request_mini_transactions(&self, io:&dyn NetworkContext, peer_id:PeerId,serialized_sketches: &Vec<u8>){
+        let _timer = MeterTimer::time_func(REQUEST_MINI_TX_TIMER.as_ref());
         let remote_sketch =MyMinisketch::deserialize_sketch(serialized_sketches);
         let mut local_sketch = {
             self.sketch.lock().clone()
