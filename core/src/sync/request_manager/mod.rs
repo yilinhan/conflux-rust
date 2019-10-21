@@ -254,7 +254,7 @@ impl RequestManager {
             }
             _ => {}
         }
-
+        TX_REQUEST_METER.mark(difference.len());
         let request = GetMini {
             request_id: 0,
             ids:difference.clone(),
