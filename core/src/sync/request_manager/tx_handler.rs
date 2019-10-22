@@ -96,12 +96,20 @@ impl ReceivedTransactionContainer {
     {
         let inner = &self.inner;
         TX_FOR_COMPARE_METER.mark(1);
-
+        if fixed_bytes %256==0 {
+            debug!("input Tx fixed bytes:{}, random byte: {} key:{}", fixed_bytes, random_byte, key1);
+        }
         match inner.txid_hashmap.get(&fixed_bytes){
             Some(set) => {
+                if fixed_bytes %256==0 {
+                    debug!("found Tx fixed bytes:{}, length: {}", fixed_bytes, set.len());
+                }
                 TX_FIRST_MISS_METER.mark(1);
                 for value in set {
                     let map =inner.txid_container.get(value).unwrap();
+                    if fixed_bytes %256==0 {
+                        debug!("compare Tx fixed bytes:{}, random byte: {} key:{}", fixed_bytes, *map.get(&key1).unwrap(), key1);
+                    }
                     if *map.get(&key1).unwrap() == random_byte{
                         TX_RANDOM_BYTE_METER.mark(1);
                         return true;
@@ -179,7 +187,7 @@ impl ReceivedTransactionContainer {
                     set
                 }
                 ); //if occupied, append, else, insert.
-            let nonces:[u64;8]= [10324,5232,34,54,523423,6673,32347,234234238];
+            let nonces:Vec<u64>= (1..36).collect();
             let mut map = HashMap::new();
             for n in &nonces{
                 map.insert(*n,TransactionDigests::get_random_byte(

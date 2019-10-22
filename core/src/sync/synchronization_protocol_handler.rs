@@ -40,6 +40,8 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use rand::prelude::*;
+
 
 lazy_static! {
     static ref TX_PROPAGATE_METER: Arc<dyn Meter> =
@@ -941,7 +943,10 @@ impl SynchronizationProtocolHandler {
         }
 
         // 29 since the remaining bytes is 29.
-        let nonces:[u64;8]= [10324,5232,34,54,523423,6673,32347,234234238];
+        let mut rng = rand::thread_rng();
+        let y: f64 = rng.gen();
+        let mut nonces:Vec<u64>= (1..36).collect();
+        nonces.shuffle(&mut rng);
 
         let mut short_trans_messages: Vec<Vec<u8>> =
             vec![vec![]; lucky_peers.len()];

@@ -210,6 +210,12 @@ impl TransactionDigests {
         message.push(transaction_id[29]);
         message.push(transaction_id[30]);
         message.push(transaction_id[31]);
+        let fixed_bytes=TransactionDigests::to_u24(transaction_id[29], transaction_id[30], transaction_id[31]);
+        if TransactionDigests::to_u24(transaction_id[29], transaction_id[30], transaction_id[31]) %256==0 {
+            debug!("compare Tx fixed bytes:{}, random byte: {} key:{}", fixed_bytes, TransactionDigests::get_random_byte(
+                transaction_id,
+                key1, ), key1);
+        }
     }
 
     pub fn append_long_trans_id(message: &mut Vec<H256>, transaction_id: H256) {
