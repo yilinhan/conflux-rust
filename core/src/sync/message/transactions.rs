@@ -82,7 +82,6 @@ impl Handleable for Transactions {
 pub struct TransactionDigests {
     pub window_index: usize,
     pub key1: u64,
-    pub key2: u64,
     trans_short_ids: Vec<u8>,
     pub trans_long_ids: Vec<H256>,
 }
@@ -127,10 +126,9 @@ impl Handleable for TransactionDigests {
 impl Encodable for TransactionDigests {
     fn rlp_append(&self, stream: &mut RlpStream) {
         stream
-            .begin_list(5)
+            .begin_list(4)
             .append(&self.window_index)
             .append(&self.key1)
-            .append(&self.key2)
             .append_list(&self.trans_short_ids)
             .append_list(&self.trans_long_ids);
     }
@@ -138,12 +136,12 @@ impl Encodable for TransactionDigests {
 
 impl Decodable for TransactionDigests {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        if rlp.item_count()? != 5 {
+        if rlp.item_count()? != 4 {
             return Err(DecoderError::RlpIncorrectListLen);
         }
 
-        let trans_short_ids = rlp.list_at(3)?;
-        let trans_long_ids = rlp.list_at(4)?;
+        let trans_short_ids = rlp.list_at(2)?;
+        let trans_long_ids = rlp.list_at(3)?;
         if trans_short_ids.len() % TransactionDigests::SHORT_ID_SIZE_IN_BYTES
             != 0
         {
@@ -154,7 +152,6 @@ impl Decodable for TransactionDigests {
         Ok(TransactionDigests {
             window_index: rlp.val_at(0)?,
             key1: rlp.val_at(1)?,
-            key2: rlp.val_at(2)?,
             trans_short_ids,
             trans_long_ids,
         })
@@ -165,14 +162,13 @@ impl TransactionDigests {
     const SHORT_ID_SIZE_IN_BYTES: usize = 4;
 
     pub fn new(
-        window_index: usize, key1: u64, key2: u64, trans_short_ids: Vec<u8>,
+        window_index: usize, key1: u64, trans_short_ids: Vec<u8>,
         trans_long_ids: Vec<H256>,
     ) -> TransactionDigests
     {
         TransactionDigests {
             window_index,
             key1,
-            key2,
             trans_short_ids,
             trans_long_ids,
         }
@@ -205,12 +201,11 @@ impl TransactionDigests {
     }
 
     pub fn append_short_trans_id(
-        message: &mut Vec<u8>, key1: u64, key2: u64, transaction_id: &H256,
+        message: &mut Vec<u8>, key1: u64, transaction_id: &H256,
     ) {
         message.push(TransactionDigests::get_random_byte(
             transaction_id,
             key1,
-            key2,
         ));
         message.push(transaction_id[29]);
         message.push(transaction_id[30]);
@@ -221,8 +216,8 @@ impl TransactionDigests {
         message.push(transaction_id);
     }
 
-    pub fn get_random_byte(transaction_id: &H256, key1: u64, key2: u64) -> u8 {
-        let mut hasher = SipHasher24::new_with_keys(key1, key2);
+    pub fn get_random_byte(transaction_id: &H256, key1: u64,) -> u8 {
+        let mut hasher = SipHasher24::new_with_keys(key1, key1+1);
         hasher.write(transaction_id.as_ref());
         (hasher.finish() & 0xff) as u8
     }

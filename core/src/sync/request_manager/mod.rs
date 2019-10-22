@@ -244,7 +244,6 @@ impl RequestManager {
 
         let window_index: usize = transaction_digests.window_index;
         let key1 = transaction_digests.key1;
-        let key2 = transaction_digests.key2;
         let (random_byte_vector, fixed_bytes_vector) =
             transaction_digests.get_decomposed_short_ids();
         let trans_long_ids: &Vec<H256> = &transaction_digests.trans_long_ids;
@@ -279,7 +278,6 @@ impl RequestManager {
                     fixed_bytes,
                     random_bytes,
                     key1,
-                    key2,
                 ) {
                     if received_transactions
                         .bucket_limit_reached(&fixed_bytes)
@@ -295,7 +293,7 @@ impl RequestManager {
                     short_tx_ids.insert(fixed_bytes);
                 } else {
                     // Already being requested, put in inflight pending queue
-                    inflight_pending_items.push(InflightPendingTrasnactionItem::new(fixed_bytes,random_bytes,window_index,key1,key2,i,peer_id));
+                    inflight_pending_items.push(InflightPendingTrasnactionItem::new(fixed_bytes,random_bytes,window_index,key1,i,peer_id));
                     INFLIGHT_TX_PENDING_POOL_METER.mark(1);
                 }
             }

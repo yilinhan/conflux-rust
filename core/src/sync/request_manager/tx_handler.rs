@@ -34,7 +34,7 @@ struct ReceivedTransactionContainerInner {
     window_size: usize,
     slot_duration_as_secs: u64,
     txid_hashmap: HashMap<TxPropagateId, HashSet<Arc<H256>>>,
-    txid_container: HashSet<Arc<H256>>,
+    txid_container: HashMap<Arc<H256>, HashMap<u64, u8>>,
     time_windowed_indices: Vec<Option<ReceivedTransactionTimeWindowedEntry>>,
 }
 
@@ -48,7 +48,7 @@ impl ReceivedTransactionContainerInner {
             window_size,
             slot_duration_as_secs,
             txid_hashmap: HashMap::new(),
-            txid_container: HashSet::new(),
+            txid_container: HashMap::new(),
             time_windowed_indices,
         }
     }
@@ -92,7 +92,6 @@ impl ReceivedTransactionContainer {
 
     pub fn contains_short_tx_id(
         &self, fixed_bytes: TxPropagateId, random_byte: u8, key1: u64,
-        key2: u64,
     ) -> bool
     {
         let inner = &self.inner;
@@ -102,9 +101,8 @@ impl ReceivedTransactionContainer {
             Some(set) => {
                 TX_FIRST_MISS_METER.mark(1);
                 for value in set {
-                    if TransactionDigests::get_random_byte(value, key1, key2)
-                        == random_byte
-                    {
+                    let map =inner.txid_container.get(value).unwrap();
+                    if *map.get(&key1).unwrap() == random_byte{
                         TX_RANDOM_BYTE_METER.mark(1);
                         return true;
                     }
@@ -118,7 +116,7 @@ impl ReceivedTransactionContainer {
 
     pub fn contains_tx_id(&self, tx_id:&H256) -> bool{
         FULL_TX_COMPARE_METER.mark(1);
-        self.inner.txid_container.contains(tx_id)
+        self.inner.txid_container.contains_key(tx_id)
     }
 
     pub fn get_length(&self) -> usize { self.inner.txid_hashmap.len() }
@@ -155,8 +153,9 @@ impl ReceivedTransactionContainer {
                             inner.txid_hashmap.remove(&key);
                         } else {
                             set.remove(tx_id);
-                            inner.txid_container.remove(tx_id);
                         }
+
+                        inner.txid_container.remove(tx_id);
                     }
                 }
                 indices_with_time.secs = secs;
@@ -180,6 +179,15 @@ impl ReceivedTransactionContainer {
                     set
                 }
                 ); //if occupied, append, else, insert.
+            let nonces:[u64;8]= [10324,5232,34,54,523423,6673,32347,234234238];
+            let mut map = HashMap::new();
+            for n in &nonces{
+                map.insert(*n,TransactionDigests::get_random_byte(
+                    &transaction.hash(),
+                    *n,
+                ));
+            }
+            inner.txid_container.insert(Arc::clone(&full_hash_id),map);
 
             entry.tx_ids.push(full_hash_id);
         }
@@ -286,18 +294,16 @@ pub struct InflightPendingTrasnactionItem{
     pub random_byte_part:u8,
     pub window_index: usize,
     pub key1: u64,
-    pub key2: u64,
     pub index: usize,
     pub peer_id: PeerId,
 }
 impl InflightPendingTrasnactionItem{
-    pub fn new(fixed_byte_part: TxPropagateId, random_byte_part:u8, window_index:usize, key1:u64, key2:u64, index:usize, peer_id:PeerId) -> Self{
+    pub fn new(fixed_byte_part: TxPropagateId, random_byte_part:u8, window_index:usize, key1:u64, index:usize, peer_id:PeerId) -> Self{
         InflightPendingTrasnactionItem{
             fixed_byte_part,
             random_byte_part,
             window_index,
             key1,
-            key2,
             index,
             peer_id,
         }
@@ -356,7 +362,7 @@ impl InflightPendingTransactionContainer {
             let fixed_bytes_part = TransactionDigests::to_u24(hash[29],hash[30],hash[31]);
             match self.inner.txid_hashmap.get_mut(&fixed_bytes_part){
                 Some(set) =>{
-                    set.retain(|item|TransactionDigests::get_random_byte(&hash, item.key1, item.key2)
+                    set.retain(|item|TransactionDigests::get_random_byte(&hash, item.key1)
                         != item.random_byte_part);
                     if set.len()==0{
                         self.inner.txid_hashmap.remove(&fixed_bytes_part);
