@@ -155,8 +155,8 @@ impl ReceivedTransactionContainer {
                             inner.txid_hashmap.remove(&key);
                         } else {
                             set.remove(tx_id);
-                            inner.txid_container.remove(tx_id);
                         }
+                        inner.txid_container.remove(tx_id);
                     }
                 }
                 indices_with_time.secs = secs;
