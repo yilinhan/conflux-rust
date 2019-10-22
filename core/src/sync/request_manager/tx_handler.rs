@@ -1,4 +1,4 @@
-use metrics::{register_meter_with_group, Meter};
+use metrics::{register_meter_with_group, Meter,MeterTimer};
 use primitives::{SignedTransaction, TxPropagateId};
 use std::{
     collections::HashSet,
@@ -15,6 +15,8 @@ lazy_static! {
         register_meter_with_group("tx_propagation", "tx_for_compare_size");
     static ref TX_RANDOM_BYTE_METER: Arc<dyn Meter> =
         register_meter_with_group("tx_propagation", "tx_random_byte_size");
+    static ref TX_COMPUTE_COST: Arc<dyn Meter> =
+        register_meter_with_group("timer", "sip_computation_cost");
 }
 const RECEIVED_TRANSACTION_CONTAINER_WINDOW_SIZE: usize = 64;
 
@@ -110,7 +112,7 @@ impl ReceivedTransactionContainer {
             }
             indices_with_time
         };
-
+        let _timer = MeterTimer::time_func(TX_COMPUTE_COST.as_ref());
         for tx_id
             in tx_ids {
                 if ! inner.txid_container[0].contains(&(SynchronizationProtocolHandler::siphash24(0 as u64,tx_id) as u32)){
