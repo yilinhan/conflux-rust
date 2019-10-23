@@ -23,6 +23,7 @@ use crate::{
         synchronization_phases::{SyncPhaseType, SynchronizationPhaseManager},
     },
 };
+
 use cfx_types::H256;
 use io::TimerToken;
 use metrics::{register_meter_with_group, Meter};
@@ -40,9 +41,11 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-
+use rand::prelude::*;
 
 use byteorder::{ByteOrder, LittleEndian};
+use siphasher::sip::SipHasher24;
+use std::hash::Hasher;
 
 lazy_static! {
     static ref TX_PROPAGATE_METER: Arc<dyn Meter> =
@@ -927,24 +930,10 @@ impl SynchronizationProtocolHandler {
         *v2 = v2.rotate_left(32);
     }
 
-    pub fn siphash24(nonce:u64,value:H256)-> u64{
-        let mut bytes = [0; 4];
-        //value.copy(to)
-        LittleEndian::read_u64_into(&value[0..32], &mut bytes);
-        let mut v0 = bytes[0];
-        let mut v1 =  bytes[1];
-        let mut v2 =  bytes[2];
-        let mut v3 =  bytes[3];
-        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
-        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
-        v0 ^= nonce;
-        v2 ^= 0xff;
-        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
-        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
-        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
-        SynchronizationProtocolHandler::sipround(&mut v0, &mut v1, &mut v2, &mut v3);
-
-        v0 ^ v1 ^ v2 ^ v3
+    pub fn siphash24(nonce:u64,value:H256)-> u32{
+        let mut hasher = SipHasher24::new_with_keys(nonce, nonce+1);
+        hasher.write(value.as_ref());
+        (hasher.finish() & 0xffffffff) as u32
     }
 
     fn propagate_transactions_to_peers(
@@ -1008,16 +997,23 @@ impl SynchronizationProtocolHandler {
             .request_manager
             .append_sent_transactions(sent_transactions.clone());
 
+        let mut rng = rand::thread_rng();
+        let y: f64 = rng.gen();
+        let mut tmp:Vec<u64>= (0..35).collect();
+        tmp.shuffle(&mut rng);
+        let mut nonces:Vec<u64>=(0..lucky_peers.len()).map(|i|tmp[i]).collect();
+
         let total_peer_num= lucky_peers.len();
         let mut msgs=Vec::new();
+
         for i in 0..lucky_peers.len(){
             let mut sip_short_ids = Vec::new();
             for item in &sent_transactions{
-                sip_short_ids.push(SynchronizationProtocolHandler::siphash24(i as u64,item.hash) as u32);
+                sip_short_ids.push(SynchronizationProtocolHandler::siphash24(nonces[i],item.hash));
             }
             msgs.push( Box::new(TransactionDigests {
                 window_index: window_index,
-                nonce:i as u64,
+                nonce:nonces[i],
                 trans_short_ids: sip_short_ids,
             }))
         }

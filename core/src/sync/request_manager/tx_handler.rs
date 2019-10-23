@@ -104,7 +104,7 @@ impl ReceivedTransactionContainer {
             if indices_with_time.secs + inner.slot_duration_as_secs <= secs {
                 for tx_id in &indices_with_time.tx_ids {
                     for i in 0..inner.txid_container.len(){
-                        inner.txid_container[i].remove(&(SynchronizationProtocolHandler::siphash24(i as u64,*tx_id) as u32));
+                        inner.txid_container[i].remove(&(SynchronizationProtocolHandler::siphash24(i as u64,*tx_id)));
                     }
                 }
                 indices_with_time.secs = secs;
@@ -115,9 +115,9 @@ impl ReceivedTransactionContainer {
         let _timer = MeterTimer::time_func(TX_COMPUTE_COST.as_ref());
         for tx_id
             in tx_ids {
-                if ! inner.txid_container[0].contains(&(SynchronizationProtocolHandler::siphash24(0 as u64,tx_id) as u32)){
+                if ! inner.txid_container[0].contains(&(SynchronizationProtocolHandler::siphash24(0 as u64,tx_id) )){
                     for i in 0..inner.txid_container.len(){
-                        inner.txid_container[i].insert(SynchronizationProtocolHandler::siphash24(i as u64,tx_id) as u32);
+                        inner.txid_container[i].insert(SynchronizationProtocolHandler::siphash24(i as u64,tx_id));
                     }
                     entry.tx_ids.push(tx_id);
                 }
