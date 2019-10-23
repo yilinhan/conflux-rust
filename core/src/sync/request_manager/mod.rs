@@ -636,7 +636,6 @@ impl RequestManager {
         signed_transactions: Vec<Arc<SignedTransaction>>,
     )
     {
-        let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
         let mut short_inflight_keys =
             self.inflight_keys.write(msgid::GET_TRANSACTIONS);
         let mut long_inflight_keys =
@@ -686,7 +685,6 @@ impl RequestManager {
         signed_transactions: Vec<Arc<SignedTransaction>>,
     )
     {
-        let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
 
         let mut long_inflight_keys = self.inflight_keys.write(msgid::GET_TRANSACTIONS_FROM_LONG_ID);
         for tx in &get_transactions_request.tx_ids{
