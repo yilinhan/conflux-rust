@@ -999,7 +999,7 @@ impl SynchronizationProtocolHandler {
 
         let mut rng = rand::thread_rng();
         let y: f64 = rng.gen();
-        let mut tmp:Vec<u64>= (0..35).collect();
+        let mut tmp:Vec<u64>= (0..8).collect();
         tmp.shuffle(&mut rng);
         let mut nonces:Vec<u64>=(0..lucky_peers.len()).map(|i|tmp[i]).collect();
 

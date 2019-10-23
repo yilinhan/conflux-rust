@@ -97,7 +97,7 @@ impl RequestManager {
             received_transactions: Arc::new(RwLock::new(
                 ReceivedTransactionContainer::new(
                     received_tx_index_maintain_timeout.as_secs(),
-                            36,
+                            8,
                 ),
             )),
             sent_transactions: RwLock::new(SentTransactionContainer::new(
