@@ -179,7 +179,7 @@ impl ReceivedTransactionContainer {
                     set
                 }
                 ); //if occupied, append, else, insert.
-            let nonces:Vec<u64>= (1..36).collect();
+            let nonces:Vec<u64>= (1..9).collect();
             let mut map = HashMap::new();
             for n in &nonces{
                 map.insert(*n,TransactionDigests::get_random_byte(
