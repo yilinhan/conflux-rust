@@ -658,7 +658,7 @@ impl RequestManager {
         if requests.is_empty() {
             return;
         }
-        let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
+
         REQUEST_TX_FROM_INFLIGHT_PENDING_POOL_METER.mark(requests.len());
         for request in requests{
             let tx_request = GetTransactions{
