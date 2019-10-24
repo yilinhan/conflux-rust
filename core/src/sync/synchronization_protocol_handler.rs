@@ -912,9 +912,9 @@ impl SynchronizationProtocolHandler {
         let chosen_size = (num_peers.powf(-0.5).min(throttle_ratio) * num_peers)
             .round() as usize;
         let mut peer_vec = self.syn.get_random_peers(
-            chosen_size.max(self.protocol_config.max_peers_propagation),
+            chosen_size.max(1000),
         );
-        peer_vec.truncate(self.protocol_config.max_peers_propagation);
+        //peer_vec.truncate(self.protocol_config.max_peers_propagation);
         peer_vec
     }
 
