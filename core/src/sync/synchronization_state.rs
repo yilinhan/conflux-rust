@@ -139,9 +139,9 @@ impl SynchronizationState {
     pub fn get_random_peers(&self, size: usize) -> Vec<PeerId> {
         let mut peers: Vec<PeerId> =
             self.peers.read().keys().cloned().collect();
-        let mut rand = random::new();
-        rand.shuffle(&mut peers);
-        peers.truncate(size);
+//        let mut rand = random::new();
+//        rand.shuffle(&mut peers);
+//        peers.truncate(size);
         peers
     }
 

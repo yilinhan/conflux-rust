@@ -122,8 +122,8 @@ class LatencyExperiment(ArgumentHolder):
         self.bandwidth = 20
         self.tps = 4000
         self.enable_tx_propagation = False
-        self.min_peers_propagate = 8
-        self.max_peers_propagate = 8
+        self.min_peers_propagate = 100
+        self.max_peers_propagate = 100
         self.metrics_report_interval_ms = 3000
         self.send_tx_period_ms = 1300
         self.txgen_account_count = 1000

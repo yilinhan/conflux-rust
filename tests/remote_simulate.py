@@ -130,13 +130,13 @@ class RemoteSimulate(ConfluxTestFramework):
         parser.add_argument(
             "--min-peers-propagation",
             dest="min_peers_propagation",
-            default=8,
+            default=100,
             type=int,
         )
         parser.add_argument(
             "--max-peers-propagation",
             dest="max_peers_propagation",
-            default=8,
+            default=100,
             type=int,
         )
         parser.add_argument(
