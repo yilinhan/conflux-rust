@@ -947,7 +947,7 @@ impl SynchronizationProtocolHandler {
         let y: f64 = rng.gen();
         let mut tmp:Vec<u64>= (1..9).collect();
         tmp.shuffle(&mut rng);
-        let mut nonces:Vec<u64>=(0..lucky_peers.len()).map(|i|tmp[i]).collect();
+        let mut nonces:Vec<u64>=(0..lucky_peers.len()).map(|i|tmp[i%8]).collect();
 
         let mut short_trans_messages: Vec<Vec<u8>> =
             vec![vec![]; lucky_peers.len()];

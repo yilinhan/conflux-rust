@@ -178,8 +178,8 @@ class Block:
 class Percentile(enum.Enum):
     Min = 0
     Avg = "avg"
-    P0_99= 0.001
-    P0_9 =0.01
+    P0_01= 0.001
+    P0_1 =0.01
     P10 = 0.1
     P20 = 0.2
     P30 = 0.3
