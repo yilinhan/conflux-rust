@@ -244,6 +244,7 @@ impl RequestManager {
 
         let window_index: usize = transaction_digests.window_index;
         let key1 = transaction_digests.key1;
+        let key2 = transaction_digests.key2;
         let (random_byte_vector, fixed_bytes_vector) =
             transaction_digests.get_decomposed_short_ids();
         let trans_long_ids: &Vec<H256> = &transaction_digests.trans_long_ids;
@@ -278,6 +279,7 @@ impl RequestManager {
                     fixed_bytes,
                     random_bytes,
                     key1,
+                    key2,
                 ) {
                     if received_transactions
                         .bucket_limit_reached(&fixed_bytes)
@@ -293,7 +295,7 @@ impl RequestManager {
                     short_tx_ids.insert(fixed_bytes);
                 } else {
                     // Already being requested, put in inflight pending queue
-                    inflight_pending_items.push(InflightPendingTrasnactionItem::new(fixed_bytes,random_bytes,window_index,key1,i,peer_id));
+                    inflight_pending_items.push(InflightPendingTrasnactionItem::new(fixed_bytes,random_bytes,window_index,key1,key2,i,peer_id));
                     INFLIGHT_TX_PENDING_POOL_METER.mark(1);
                 }
             }
@@ -636,6 +638,7 @@ impl RequestManager {
         signed_transactions: Vec<Arc<SignedTransaction>>,
     )
     {
+        let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
         let mut short_inflight_keys =
             self.inflight_keys.write(msgid::GET_TRANSACTIONS);
         let mut long_inflight_keys =
@@ -657,7 +660,7 @@ impl RequestManager {
         if requests.is_empty() {
             return;
         }
-
+        let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
         REQUEST_TX_FROM_INFLIGHT_PENDING_POOL_METER.mark(requests.len());
         for request in requests{
             let tx_request = GetTransactions{
@@ -667,7 +670,7 @@ impl RequestManager {
                 long_id_indices:vec![],
                 short_tx_ids: {let mut set = HashSet::new();
                     set.insert(request.fixed_byte_part);
-                set},
+                    set},
                 long_tx_ids: HashSet::new(),
             };
             if self
@@ -685,6 +688,7 @@ impl RequestManager {
         signed_transactions: Vec<Arc<SignedTransaction>>,
     )
     {
+        let _timer = MeterTimer::time_func(REQUEST_MANAGER_TX_TIMER.as_ref());
 
         let mut long_inflight_keys = self.inflight_keys.write(msgid::GET_TRANSACTIONS_FROM_LONG_ID);
         for tx in &get_transactions_request.tx_ids{
@@ -700,7 +704,7 @@ impl RequestManager {
         let mut txs = Vec::with_capacity(indices.len());
         for index in indices {
             if let Some(tx) =
-                sent_transactions.get_transaction(window_index, *index)
+            sent_transactions.get_transaction(window_index, *index)
             {
                 txs.push(tx.transaction.clone());
             }
@@ -790,7 +794,7 @@ impl RequestManager {
 
     pub fn on_peer_disconnected(&self, io: &dyn NetworkContext, peer: PeerId) {
         if let Some(mut unfinished_requests) =
-            self.request_handler.remove_peer(peer)
+        self.request_handler.remove_peer(peer)
         {
             {
                 for msg in &unfinished_requests {

@@ -943,11 +943,9 @@ impl SynchronizationProtocolHandler {
         }
 
         // 29 since the remaining bytes is 29.
-        let mut rng = rand::thread_rng();
-        let y: f64 = rng.gen();
-        let mut tmp:Vec<u64>= (1..9).collect();
-        tmp.shuffle(&mut rng);
-        let mut nonces:Vec<u64>=(0..lucky_peers.len()).map(|i|tmp[i%8]).collect();
+        let mut nonces: Vec<(u64, u64)> = (0..lucky_peers.len())
+            .map(|_| (rand::thread_rng().gen(), rand::thread_rng().gen()))
+            .collect();
 
         let mut short_trans_messages: Vec<Vec<u8>> =
             vec![vec![]; lucky_peers.len()];
@@ -1001,7 +999,8 @@ impl SynchronizationProtocolHandler {
                 // bytes]
                 TransactionDigests::append_short_trans_id(
                     &mut short_trans_messages[i],
-                    nonces[i],
+                    nonces[i].0,
+                    nonces[i].1,
                     &tx.hash(),
                 );
             }
@@ -1037,10 +1036,11 @@ impl SynchronizationProtocolHandler {
 
         for i in 0..lucky_peers.len() {
             let peer_id = lucky_peers[i];
-            let key1 = nonces.pop().unwrap();
+            let (key1, key2) = nonces.pop().unwrap();
             let tx_msg = TransactionDigests::new(
                 window_index,
                 key1,
+                key2,
                 short_trans_messages.pop().unwrap(),
                 long_trans_message.clone(),
             );

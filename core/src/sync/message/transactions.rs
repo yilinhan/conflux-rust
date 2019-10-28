@@ -47,10 +47,10 @@ impl Handleable for Transactions {
                 peer_info.received_transaction_count += transactions.len();
                 peer_info.received_transaction_count
                     > ctx
-                        .manager
-                        .protocol_config
-                        .max_trans_count_received_in_catch_up
-                        as usize
+                    .manager
+                    .protocol_config
+                    .max_trans_count_received_in_catch_up
+                    as usize
             } else {
                 false
             }
@@ -82,6 +82,7 @@ impl Handleable for Transactions {
 pub struct TransactionDigests {
     pub window_index: usize,
     pub key1: u64,
+    pub key2: u64,
     trans_short_ids: Vec<u8>,
     pub trans_long_ids: Vec<H256>,
 }
@@ -100,10 +101,10 @@ impl Handleable for TransactionDigests {
                     self.trans_short_ids.len() + self.trans_long_ids.len();
                 if peer_info.received_transaction_count
                     > ctx
-                        .manager
-                        .protocol_config
-                        .max_trans_count_received_in_catch_up
-                        as usize
+                    .manager
+                    .protocol_config
+                    .max_trans_count_received_in_catch_up
+                    as usize
                 {
                     bail!(ErrorKind::TooManyTrans);
                 }
@@ -126,9 +127,10 @@ impl Handleable for TransactionDigests {
 impl Encodable for TransactionDigests {
     fn rlp_append(&self, stream: &mut RlpStream) {
         stream
-            .begin_list(4)
+            .begin_list(5)
             .append(&self.window_index)
             .append(&self.key1)
+            .append(&self.key2)
             .append_list(&self.trans_short_ids)
             .append_list(&self.trans_long_ids);
     }
@@ -136,12 +138,12 @@ impl Encodable for TransactionDigests {
 
 impl Decodable for TransactionDigests {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        if rlp.item_count()? != 4 {
+        if rlp.item_count()? != 5 {
             return Err(DecoderError::RlpIncorrectListLen);
         }
 
-        let trans_short_ids = rlp.list_at(2)?;
-        let trans_long_ids = rlp.list_at(3)?;
+        let trans_short_ids = rlp.list_at(3)?;
+        let trans_long_ids = rlp.list_at(4)?;
         if trans_short_ids.len() % TransactionDigests::SHORT_ID_SIZE_IN_BYTES
             != 0
         {
@@ -152,6 +154,7 @@ impl Decodable for TransactionDigests {
         Ok(TransactionDigests {
             window_index: rlp.val_at(0)?,
             key1: rlp.val_at(1)?,
+            key2: rlp.val_at(2)?,
             trans_short_ids,
             trans_long_ids,
         })
@@ -162,13 +165,14 @@ impl TransactionDigests {
     const SHORT_ID_SIZE_IN_BYTES: usize = 4;
 
     pub fn new(
-        window_index: usize, key1: u64, trans_short_ids: Vec<u8>,
+        window_index: usize, key1: u64, key2: u64, trans_short_ids: Vec<u8>,
         trans_long_ids: Vec<H256>,
     ) -> TransactionDigests
     {
         TransactionDigests {
             window_index,
             key1,
+            key2,
             trans_short_ids,
             trans_long_ids,
         }
@@ -180,14 +184,14 @@ impl TransactionDigests {
 
         for i in (0..self.trans_short_ids.len())
             .step_by(TransactionDigests::SHORT_ID_SIZE_IN_BYTES)
-        {
-            random_byte_vector.push(self.trans_short_ids[i]);
-            fixed_bytes_vector.push(TransactionDigests::to_u24(
-                self.trans_short_ids[i + 1],
-                self.trans_short_ids[i + 2],
-                self.trans_short_ids[i + 3],
-            ));
-        }
+            {
+                random_byte_vector.push(self.trans_short_ids[i]);
+                fixed_bytes_vector.push(TransactionDigests::to_u24(
+                    self.trans_short_ids[i + 1],
+                    self.trans_short_ids[i + 2],
+                    self.trans_short_ids[i + 3],
+                ));
+            }
 
         (random_byte_vector, fixed_bytes_vector)
     }
@@ -201,11 +205,12 @@ impl TransactionDigests {
     }
 
     pub fn append_short_trans_id(
-        message: &mut Vec<u8>, key1: u64, transaction_id: &H256,
+        message: &mut Vec<u8>, key1: u64, key2: u64, transaction_id: &H256,
     ) {
         message.push(TransactionDigests::get_random_byte(
             transaction_id,
             key1,
+            key2,
         ));
         message.push(transaction_id[29]);
         message.push(transaction_id[30]);
@@ -216,8 +221,8 @@ impl TransactionDigests {
         message.push(transaction_id);
     }
 
-    pub fn get_random_byte(transaction_id: &H256, key1: u64,) -> u8 {
-        let mut hasher = SipHasher24::new_with_keys(key1, key1+1);
+    pub fn get_random_byte(transaction_id: &H256, key1: u64, key2: u64) -> u8 {
+        let mut hasher = SipHasher24::new_with_keys(key1, key2);
         hasher.write(transaction_id.as_ref());
         (hasher.finish() & 0xff) as u8
     }
@@ -246,7 +251,7 @@ impl Request for GetTransactions {
 
     fn on_removed(&self, inflight_keys: &KeyContainer) {
         let mut short_inflight_keys =
-           inflight_keys.write(msgid::GET_TRANSACTIONS);
+            inflight_keys.write(msgid::GET_TRANSACTIONS);
         let mut long_inflight_keys =
             inflight_keys.write(msgid::GET_TRANSACTIONS_FROM_LONG_ID);
         for tx in &self.short_tx_ids {
