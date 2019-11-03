@@ -899,7 +899,7 @@ impl SynchronizationProtocolHandler {
         let mut peer_vec = self.syn.get_random_peers(
             chosen_size.max(self.protocol_config.min_peers_propagation),
         );
-        //peer_vec.truncate(self.protocol_config.max_peers_propagation);
+        peer_vec.truncate(self.protocol_config.max_peers_propagation);
         peer_vec
     }
 
