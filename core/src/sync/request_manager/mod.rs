@@ -221,9 +221,9 @@ impl RequestManager {
             return;
         }
 
-
+        let mut inflight_keys =
+            self.inflight_keys.write(msgid::GET_TRANSACTIONS);
         let received_transactions = self.received_transactions.read();
-
 
         TX_RECEIVED_POOL_METER.mark(received_transactions.get_length());
 
@@ -234,6 +234,9 @@ impl RequestManager {
             for (idx, tx_id) in received_tx_ids.iter().enumerate() {
                 if received_transactions.contains_txid(tx_id) {
                     // Already received
+                    continue;
+                }
+                if !inflight_keys.insert(Key::Id(*tx_id)){
                     continue;
                 }
 
