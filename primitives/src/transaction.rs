@@ -19,7 +19,7 @@ pub const UNSIGNED_SENDER: Address = H160([0xff; 20]);
 // TODO should be u48
 pub type TxShortId = u64;
 
-pub type TxPropagateId = H256;
+pub type TxPropagateId = u64;
 
 #[derive(Debug, PartialEq, Clone)]
 /// Errors concerning transaction processing.

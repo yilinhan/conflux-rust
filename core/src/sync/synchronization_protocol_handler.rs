@@ -950,7 +950,7 @@ impl SynchronizationProtocolHandler {
                     break;
                 }
                 sent_transactions.push(tx.clone());
-                tx_msg.trans_short_ids.push(TxPropagateId::from_slice(h.as_bytes()));
+                tx_msg.trans_short_ids.push(h.to_low_u64_le());
             }
 
             if sent_transactions.len() != transactions.len() {
